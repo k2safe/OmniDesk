@@ -58,6 +58,12 @@ make release BUMP=patch
 make local-mac-release BUMP=patch TOKEN=<github_token>
 ```
 
+`make package` defaults to `.app` plus updater artifacts. To also build a local dmg, run:
+
+```bash
+TAURI_BUILD_ARGS="--bundles dmg,app" make package
+```
+
 The updater signing private key is generated locally at `.tauri/omnidesk-updater.key` and is ignored by git. Add it to the private GitHub repository secrets before running the desktop build workflow:
 
 ```bash

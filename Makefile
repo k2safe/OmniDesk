@@ -8,7 +8,7 @@ PUSH ?= 1
 REPO ?= k2safe/OmniDesk
 RELEASES_REPO ?= k2safe/OmniDesk-releases
 SIGNING_KEY_PATH ?= .tauri/omnidesk-updater.key
-TAURI_BUILD_ARGS ?= --bundles dmg,app
+TAURI_BUILD_ARGS ?= --bundles app
 
 .PHONY: h help build package local-package publish-local-release local-mac-release release push-release create-release-repo github-secrets
 
@@ -21,7 +21,7 @@ h help:
 		'' \
 		'  make package / make local-package' \
 		'      本机打桌面包，并把安装包、updater 压缩包、.sig、latest.json 收集到 dist-release。' \
-		'      默认打 macOS dmg/app，可选：TAURI_BUILD_ARGS="--bundles dmg,app"。' \
+		'      默认打 macOS app 和 updater 包；需要 dmg 时可选：TAURI_BUILD_ARGS="--bundles dmg,app"。' \
 		'' \
 		'  make publish-local-release TOKEN=<github_token>' \
 		'      把 dist-release 上传到公开仓库 k2safe/OmniDesk-releases 的 GitHub Release。' \

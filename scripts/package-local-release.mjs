@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const signingKeyPath = path.resolve(rootDir, process.env.SIGNING_KEY_PATH || ".tauri/omnidesk-updater.key");
-const buildArgs = splitArgs(process.env.TAURI_BUILD_ARGS || "--bundles dmg,app");
+const buildArgs = splitArgs(process.env.TAURI_BUILD_ARGS || "--bundles app");
 const platform = resolvePlatform(buildArgs);
 const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
 const tauriConfig = JSON.parse(fs.readFileSync(path.join(rootDir, "src-tauri/tauri.conf.json"), "utf8"));
