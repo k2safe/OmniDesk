@@ -37,16 +37,16 @@ Code repository:
 git@github.com:k2safe/OmniDesk.git
 ```
 
-Desktop auto-update uses a separate public release repository:
+Desktop auto-update uses the public code repository releases directly:
 
 ```text
-k2safe/OmniDesk-releases
+k2safe/OmniDesk
 ```
 
 The updater checks:
 
 ```text
-https://github.com/k2safe/OmniDesk-releases/releases/latest/download/latest.json
+https://github.com/k2safe/OmniDesk/releases/latest/download/latest.json
 ```
 
 Local release helpers:
@@ -64,7 +64,7 @@ make local-mac-release BUMP=patch TOKEN=<github_token>
 TAURI_BUILD_ARGS="--bundles dmg,app" make package
 ```
 
-The updater signing private key is generated locally at `.tauri/omnidesk-updater.key` and is ignored by git. Add it to the private GitHub repository secrets before running the desktop build workflow:
+The updater signing private key is generated locally at `.tauri/omnidesk-updater.key` and is ignored by git. If GitHub Actions is used later, add it to repository secrets:
 
 ```bash
 make github-secrets TOKEN=<github_token>
@@ -75,7 +75,7 @@ Required GitHub secrets:
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `RELEASES_REPO_TOKEN`
 
-Create the public release repository if needed:
+If you later split release assets into a separate public repository, create it with:
 
 ```bash
 make create-release-repo TOKEN=<github_token>

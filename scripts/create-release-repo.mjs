@@ -1,5 +1,5 @@
 const token = (process.env.TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "").trim();
-const repoSlug = (process.env.RELEASES_REPO || "k2safe/OmniDesk-releases").trim();
+const repoSlug = (process.env.RELEASES_REPO || "k2safe/OmniDesk").trim();
 
 if (!token) {
   console.error("Missing TOKEN, GITHUB_TOKEN, or GH_TOKEN.");

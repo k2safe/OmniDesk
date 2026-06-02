@@ -6,7 +6,7 @@ PROXY ?= http://127.0.0.1:10021
 TOKEN ?=
 PUSH ?= 1
 REPO ?= k2safe/OmniDesk
-RELEASES_REPO ?= k2safe/OmniDesk-releases
+RELEASES_REPO ?= k2safe/OmniDesk
 SIGNING_KEY_PATH ?= .tauri/omnidesk-updater.key
 TAURI_BUILD_ARGS ?= --bundles app
 
@@ -24,8 +24,8 @@ h help:
 		'      默认打 macOS app 和 updater 包；需要 dmg 时可选：TAURI_BUILD_ARGS="--bundles dmg,app"。' \
 		'' \
 		'  make publish-local-release TOKEN=<github_token>' \
-		'      把 dist-release 上传到公开仓库 k2safe/OmniDesk-releases 的 GitHub Release。' \
-		'      TOKEN 需要有 k2safe/OmniDesk-releases 的 Contents: Read and write 权限。' \
+		'      把 dist-release 上传到公开仓库 k2safe/OmniDesk 的 GitHub Release。' \
+		'      TOKEN 需要有 k2safe/OmniDesk 的 Contents: Read and write 权限。' \
 		'' \
 		'  make local-mac-release BUMP=patch TOKEN=<github_token>' \
 		'      推荐发版命令：升级版本、本机打 macOS 包、上传公开 Release、推送代码和 app-vX.Y.Z tag。' \
@@ -40,7 +40,7 @@ h help:
 		'      不升级版本，直接推送当前 package.json 里的版本和 app-vX.Y.Z tag。' \
 		'' \
 		'  make create-release-repo TOKEN=<github_token>' \
-		'      创建公开发布仓库 k2safe/OmniDesk-releases，只用于放安装包、.sig 和 latest.json。' \
+		'      创建独立公开发布仓库；默认不需要，当前直接把 release assets 放到 k2safe/OmniDesk。' \
 		'' \
 		'  make github-secrets TOKEN=<github_token>' \
 		'      把 updater 签名私钥和公开发布仓库 token 写入私有代码仓库的 GitHub Secrets。'

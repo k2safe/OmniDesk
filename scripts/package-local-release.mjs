@@ -44,7 +44,7 @@ run(process.execPath, ["scripts/collect-release-assets.mjs"], {
 
 run(process.execPath, ["scripts/create-updater-latest.mjs", "dist-release"], {
   env: {
-    OMNIDESK_RELEASE_REPO: process.env.RELEASES_REPO || "k2safe/OmniDesk-releases",
+    OMNIDESK_RELEASE_REPO: process.env.RELEASES_REPO || "k2safe/OmniDesk",
     OMNIDESK_REQUIRED_PLATFORMS: process.env.OMNIDESK_REQUIRED_PLATFORMS || ""
   }
 });

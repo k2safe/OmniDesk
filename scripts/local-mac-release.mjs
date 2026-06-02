@@ -21,7 +21,7 @@ run(process.execPath, ["scripts/package-local-release.mjs"], {
   env: {
     SIGNING_KEY_PATH: process.env.SIGNING_KEY_PATH || ".tauri/omnidesk-updater.key",
     TAURI_BUILD_ARGS: process.env.TAURI_BUILD_ARGS || "--bundles app",
-    RELEASES_REPO: process.env.RELEASES_REPO || "k2safe/OmniDesk-releases"
+    RELEASES_REPO: process.env.RELEASES_REPO || "k2safe/OmniDesk"
   }
 });
 
@@ -29,7 +29,7 @@ run(process.execPath, ["scripts/publish-local-release.mjs"], {
   env: {
     TOKEN: token,
     PROXY: process.env.PROXY || "",
-    RELEASES_REPO: process.env.RELEASES_REPO || "k2safe/OmniDesk-releases"
+    RELEASES_REPO: process.env.RELEASES_REPO || "k2safe/OmniDesk"
   }
 });
 

@@ -6,7 +6,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
 
 const artifactsDir = path.resolve(process.argv[2] || "release-artifacts");
-const releaseRepo = process.env.OMNIDESK_RELEASE_REPO || "k2safe/OmniDesk-releases";
+const releaseRepo = process.env.OMNIDESK_RELEASE_REPO || "k2safe/OmniDesk";
 const tagName = process.env.OMNIDESK_TAG_NAME || `app-v${packageJson.version}`;
 const requiredPlatforms = (process.env.OMNIDESK_REQUIRED_PLATFORMS || "")
   .split(",")
