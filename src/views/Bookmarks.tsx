@@ -216,6 +216,8 @@ function flattenGroupNodes(node: GroupNode): GroupNode[] {
   return node.children.flatMap((child) => [child, ...flattenGroupNodes(child)]);
 }
 
+const bookmarkIconCacheJobs = new Set<string>();
+
 function BookmarkLogo({
   bookmark,
   onIconCached,
@@ -260,7 +262,13 @@ function BookmarkLogo({
   }, [src]);
 
   useEffect(() => {
+    if (bookmark.iconUrl && isLocalBookmarkIconUrl(bookmark.iconUrl)) return;
+
+    const cacheKey = `${bookmark.url}|${bookmark.iconUrl ?? "" }`;
+    if (bookmarkIconCacheJobs.has(cacheKey)) return;
+
     let cancelled = false;
+    bookmarkIconCacheJobs.add(cacheKey);
     void cacheBookmarkIcon(bookmark.url, bookmark.iconUrl)
       .then((cached) => {
         if (!cancelled && cached?.iconUrl && cached.iconUrl !== bookmark.iconUrl) {
@@ -269,6 +277,9 @@ function BookmarkLogo({
       })
       .catch(() => {
         // Favicon cache is opportunistic; the bookmark itself must still render offline.
+      })
+      .finally(() => {
+        bookmarkIconCacheJobs.delete(cacheKey);
       });
     return () => {
       cancelled = true;

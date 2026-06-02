@@ -97,7 +97,8 @@ function buildSimpleDmg(version, platformId) {
     const args = ["create", "-volname", "OmniDesk", "-srcfolder", stagingDir, "-ov", "-format", "UDZO", dmgPath];
     const direct = run("hdiutil", args, { allowFailure: true });
     if (direct.status !== 0) {
-      const appleScript = `do shell script ${appleScriptString(commandLine("hdiutil", args))}`;
+      const fallbackCommand = ["hdiutil", ...args].join(" ");
+      const appleScript = `do shell script ${appleScriptString(fallbackCommand)}`;
       run("osascript", ["-e", appleScript]);
     }
   } finally {

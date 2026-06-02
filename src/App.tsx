@@ -11,7 +11,7 @@ import { Bookmarks } from "./views/Bookmarks";
 import { TOTPView } from "./views/TOTP";
 import { Snippets } from "./views/Snippets";
 import { Subscriptions } from "./views/Subscriptions";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { Launcher } from "./components/Launcher";
 import { SecuritySettings } from "./components/SecuritySettings";
 import { CommonSettings } from "./components/CommonSettings";
@@ -98,29 +98,44 @@ function useAutoLock(isLocked: boolean, onLock: () => Promise<void>) {
     let localLastActivity = Date.now();
     let isLocking = false;
 
-    const markActivity = () => {
-      localLastActivity = Date.now();
-    };
-
-    const checkIdle = async () => {
-      if (isLocking) return;
+    const checkIdle = async (fallbackIdleOverride?: number) => {
+      if (isLocking) return false;
 
       const systemIdleMillis = await getSystemIdleMillis();
-      const fallbackIdleMillis = Date.now() - localLastActivity;
+      const fallbackIdleMillis = fallbackIdleOverride ?? Date.now() - localLastActivity;
       const idleMillis = systemIdleMillis ?? fallbackIdleMillis;
 
       if (idleMillis >= idleLimit) {
         isLocking = true;
         await onLock();
+        return true;
+      }
+
+      return false;
+    };
+
+    const markActivity = () => {
+      const idleBeforeActivity = Date.now() - localLastActivity;
+      localLastActivity = Date.now();
+      if (idleBeforeActivity >= idleLimit) {
+        void checkIdle(idleBeforeActivity);
       }
     };
 
+    const checkResumeIdle = () => {
+      void checkIdle();
+    };
+
     const events = ["pointerdown", "keydown", "wheel", "touchstart", "mousemove"];
-    events.forEach((event) => window.addEventListener(event, markActivity, { passive: true }));
+    events.forEach((event) => window.addEventListener(event, markActivity, { passive: true, capture: true }));
+    window.addEventListener("focus", checkResumeIdle);
+    document.addEventListener("visibilitychange", checkResumeIdle);
     const interval = window.setInterval(checkIdle, 15_000);
 
     return () => {
-      events.forEach((event) => window.removeEventListener(event, markActivity));
+      events.forEach((event) => window.removeEventListener(event, markActivity, { capture: true }));
+      window.removeEventListener("focus", checkResumeIdle);
+      document.removeEventListener("visibilitychange", checkResumeIdle);
       window.clearInterval(interval);
     };
   }, [isLocked, onLock]);
@@ -314,18 +329,9 @@ function Workspace({ onLock }: { onLock: () => void | Promise<void> }) {
     <div className="flex h-full flex-col overflow-hidden bg-slate-50 font-sans">
       <main className="flex-1 overflow-hidden relative">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none mix-blend-screen -translate-y-1/2 translate-x-1/4"></div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentView}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="h-full w-full pb-24"
-          >
-            {renderView()}
-          </motion.div>
-        </AnimatePresence>
+        <div className="h-full w-full pb-24">
+          {renderView()}
+        </div>
       </main>
 
       <Dock 

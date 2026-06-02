@@ -19,7 +19,6 @@ use std::{
   process::Command,
   sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
-    mpsc,
     Arc, Mutex,
   },
   thread,
@@ -67,20 +66,14 @@ struct RuntimeState {
 
 type AppState = Arc<RuntimeState>;
 
-fn run_with_timeout<T, F>(label: &'static str, timeout: Duration, task: F) -> Result<T, String>
+async fn run_blocking_command<T, F>(label: &'static str, task: F) -> Result<T, String>
 where
   T: Send + 'static,
   F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-  let (tx, rx) = mpsc::channel();
-  thread::spawn(move || {
-    let _ = tx.send(task());
-  });
-  match rx.recv_timeout(timeout) {
-    Ok(result) => result,
-    Err(mpsc::RecvTimeoutError::Timeout) => Err(format!("{label}超时，请重启 OmniDesk 后再试")),
-    Err(mpsc::RecvTimeoutError::Disconnected) => Err(format!("{label}任务异常，请重启 OmniDesk 后再试")),
-  }
+  tauri::async_runtime::spawn_blocking(task)
+    .await
+    .map_err(|err| format!("{label}任务异常: {err}"))?
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1220,8 +1213,9 @@ fn init_database(conn: &Connection) -> Result<(), String> {
   conn
     .execute_batch(
       r#"
-      PRAGMA busy_timeout = 2000;
-      PRAGMA journal_mode = DELETE;
+      PRAGMA busy_timeout = 5000;
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
@@ -2112,9 +2106,9 @@ fn unlock_inner(app: AppHandle, state: AppState, password: String) -> Result<(),
 }
 
 #[tauri::command]
-fn unlock(app: AppHandle, state: State<AppState>, password: String) -> Result<(), String> {
+async fn unlock(app: AppHandle, state: State<'_, AppState>, password: String) -> Result<(), String> {
   let state = state.inner().clone();
-  run_with_timeout("解锁", Duration::from_secs(15), move || unlock_inner(app, state, password))
+  run_blocking_command("解锁", move || unlock_inner(app, state, password)).await
 }
 
 #[tauri::command]
@@ -2174,9 +2168,8 @@ fn verify_password(app: AppHandle, password: String) -> Result<(), String> {
   verify_master_password(&record, &password).map(|_| ())
 }
 
-#[tauri::command]
-fn lock_store(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-  flush_cached_store(&app, state.inner().as_ref())?;
+fn lock_store_inner(app: AppHandle, state: AppState) -> Result<(), String> {
+  flush_cached_store(&app, state.as_ref())?;
   *state
     .key
     .lock()
@@ -2186,6 +2179,12 @@ fn lock_store(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     .lock()
     .map_err(|_| "无法清理 Rust 内存缓存".to_string())? = None;
   Ok(())
+}
+
+#[tauri::command]
+async fn lock_store(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+  let state = state.inner().clone();
+  run_blocking_command("锁定工作区", move || lock_store_inner(app, state)).await
 }
 
 fn load_store_inner(app: AppHandle, state: AppState) -> Result<Value, String> {
@@ -2209,26 +2208,30 @@ fn load_store_inner(app: AppHandle, state: AppState) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn load_store(app: AppHandle, state: State<AppState>) -> Result<Value, String> {
+async fn load_store(app: AppHandle, state: State<'_, AppState>) -> Result<Value, String> {
   let state = state.inner().clone();
-  run_with_timeout("加载本地数据", Duration::from_secs(20), move || load_store_inner(app, state))
+  run_blocking_command("加载本地数据", move || load_store_inner(app, state)).await
 }
 
 #[tauri::command]
-fn unlock_and_load_store(app: AppHandle, state: State<AppState>, password: String) -> Result<Value, String> {
+async fn unlock_and_load_store(
+  app: AppHandle,
+  state: State<'_, AppState>,
+  password: String,
+) -> Result<Value, String> {
   let state = state.inner().clone();
-  run_with_timeout("解锁并加载本地数据", Duration::from_secs(25), move || {
+  run_blocking_command("解锁并加载本地数据", move || {
     unlock_inner(app.clone(), state.clone(), password)?;
     load_store_inner(app, state)
   })
+  .await
 }
 
-#[tauri::command]
-fn save_store(app: AppHandle, state: State<AppState>, store: Value) -> Result<(), String> {
+fn save_store_inner(app: AppHandle, state: AppState, store: Value) -> Result<(), String> {
   let object = store
     .as_object()
     .ok_or_else(|| "本地数据必须是对象".to_string())?;
-  let key = current_key(state.inner().as_ref())?;
+  let key = current_key(state.as_ref())?;
   let cache = object.clone();
   *state
     .cache
@@ -2238,9 +2241,14 @@ fn save_store(app: AppHandle, state: State<AppState>, store: Value) -> Result<()
 }
 
 #[tauri::command]
-fn save_store_item(
+async fn save_store(app: AppHandle, state: State<'_, AppState>, store: Value) -> Result<(), String> {
+  let state = state.inner().clone();
+  run_blocking_command("保存本地数据", move || save_store_inner(app, state, store)).await
+}
+
+fn save_store_item_inner(
   app: AppHandle,
-  state: State<AppState>,
+  state: AppState,
   store_key: String,
   value: Value,
 ) -> Result<(), String> {
@@ -2248,7 +2256,7 @@ fn save_store_item(
     return Err("存储 key 不能为空".to_string());
   }
 
-  let key = current_key(state.inner().as_ref())?;
+  let key = current_key(state.as_ref())?;
   let notes_for_index = (store_key == "notes").then(|| value.clone());
   let bookmarks_for_index = (store_key == "bookmarks").then(|| value.clone());
   let needs_load = state
@@ -2284,8 +2292,19 @@ fn save_store_item(
     sync_bookmarks_fts_best_effort(&app, &bookmarks);
   }
 
-  schedule_cache_flush(app, state.inner().clone());
+  schedule_cache_flush(app, state);
   Ok(())
+}
+
+#[tauri::command]
+async fn save_store_item(
+  app: AppHandle,
+  state: State<'_, AppState>,
+  store_key: String,
+  value: Value,
+) -> Result<(), String> {
+  let state = state.inner().clone();
+  run_blocking_command("保存本地数据项", move || save_store_item_inner(app, state, store_key, value)).await
 }
 
 #[tauri::command]
@@ -2744,8 +2763,7 @@ fn import_chrome_bookmarks(
   })
 }
 
-#[tauri::command]
-fn cache_bookmark_icon(
+fn cache_bookmark_icon_inner(
   app: AppHandle,
   url: String,
   icon_url: Option<String>,
@@ -2781,6 +2799,15 @@ fn cache_bookmark_icon(
   }
 
   Ok(None)
+}
+
+#[tauri::command]
+async fn cache_bookmark_icon(
+  app: AppHandle,
+  url: String,
+  icon_url: Option<String>,
+) -> Result<Option<CachedBookmarkIcon>, String> {
+  run_blocking_command("缓存书签图标", move || cache_bookmark_icon_inner(app, url, icon_url)).await
 }
 
 #[tauri::command]
