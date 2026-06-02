@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 BUMP ?= patch
 VERSION ?=
-PROXY ?= http://127.0.0.1:10021
+PROXY ?=
 TOKEN ?=
 PUSH ?= 1
 PUBLISH ?= 1
@@ -23,15 +23,15 @@ h help:
 		'' \
 		'  make package / make local-package' \
 		'      本机打桌面包，并把安装包、updater 压缩包、.sig、latest.json 收集到 dist-release。' \
-		'      默认打 macOS app 和 updater 包；需要 dmg 时可选：TAURI_BUILD_ARGS="--bundles dmg,app"。' \
+		'      local-package 可用 TAURI_BUILD_ARGS 选择官方 Tauri bundles，例如 TAURI_BUILD_ARGS="--bundles app,dmg"。' \
 		'' \
 		'  make publish-local-release TOKEN=<github_token>' \
 		'      把 dist-release 上传到公开仓库 k2safe/OmniDesk 的 GitHub Release。' \
 		'      TOKEN 需要有 k2safe/OmniDesk 的 Contents: Read and write 权限。' \
 		'' \
 		'  make desktop-release TOKEN=<github_token> / make ship TOKEN=<github_token>' \
-		'      推荐发版命令：升级版本、本机打 macOS 包和 DMG、写入 updates、推送代码/tag、上传公开 Release。' \
-		'      默认 BUMP=patch；也可以指定 VERSION=0.1.6。需要只本地打包可加 PUBLISH=0 PUSH=0。' \
+		'      推荐发版命令：升级版本、用 Tauri 官方 bundler 本机打 macOS app/DMG、写入 updates、推送代码/tag、上传公开 Release。' \
+		'      默认 BUMP=patch；也可以指定 VERSION=0.1.6。需要只本地打包可加 PUBLISH=0 PUSH=0，需要跳过 DMG 可加 SKIP_DMG=1。' \
 		'' \
 		'  make release BUMP=patch' \
 		'      只升级版本、构建、提交、打 app-vX.Y.Z tag，并推送代码/tag；不会本地打包。' \

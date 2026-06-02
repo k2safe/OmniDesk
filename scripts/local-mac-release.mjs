@@ -36,15 +36,12 @@ const updaterBaseUrl =
 run(process.execPath, ["scripts/package-local-release.mjs"], {
   env: {
     SIGNING_KEY_PATH: signingKeyPath,
-    TAURI_BUILD_ARGS: "--bundles app",
+    TAURI_BUILD_ARGS: shouldBuildDmg ? "--bundles app,dmg" : "--bundles app",
     RELEASES_REPO: releasesRepo,
     OMNIDESK_UPDATER_BASE_URL: updaterBaseUrl
   }
 });
 
-if (shouldBuildDmg) {
-  buildSimpleDmg(version, platformId);
-}
 copyUpdaterAssets(version, platformId);
 
 if (shouldPushCode) {
@@ -74,36 +71,6 @@ function readPackageVersion() {
 function ensureNodeModules() {
   if (fs.existsSync(path.join(rootDir, "node_modules"))) return;
   run("pnpm", ["install", "--frozen-lockfile"]);
-}
-
-function buildSimpleDmg(version, platformId) {
-  if (process.platform !== "darwin") return;
-
-  const appPath = path.join(rootDir, "src-tauri/target/release/bundle/macos/OmniDesk.app");
-  if (!fs.existsSync(appPath)) {
-    throw new Error(`macOS app bundle not found: ${path.relative(rootDir, appPath)}`);
-  }
-
-  const distDir = path.join(rootDir, "dist-release");
-  fs.mkdirSync(distDir, { recursive: true });
-
-  const dmgPath = path.join(distDir, `OmniDesk-v${version}-${platformId}.dmg`);
-  const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), "omnidesk-dmg."));
-
-  try {
-    fs.cpSync(appPath, path.join(stagingDir, "OmniDesk.app"), { recursive: true });
-    fs.symlinkSync("/Applications", path.join(stagingDir, "Applications"));
-
-    const args = ["create", "-volname", "OmniDesk", "-srcfolder", stagingDir, "-ov", "-format", "UDZO", dmgPath];
-    const direct = run("hdiutil", args, { allowFailure: true });
-    if (direct.status !== 0) {
-      const fallbackCommand = ["hdiutil", ...args].join(" ");
-      const appleScript = `do shell script ${appleScriptString(fallbackCommand)}`;
-      run("osascript", ["-e", appleScript]);
-    }
-  } finally {
-    fs.rmSync(stagingDir, { recursive: true, force: true });
-  }
 }
 
 function copyUpdaterAssets(version, platformId) {
@@ -214,14 +181,3 @@ function isGitRepo() {
   return fs.existsSync(path.join(rootDir, ".git"));
 }
 
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, "'\\''")}'`;
-}
-
-function commandLine(command, args) {
-  return [command, ...args].map(shellQuote).join(" ");
-}
-
-function appleScriptString(value) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}

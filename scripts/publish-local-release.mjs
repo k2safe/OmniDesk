@@ -10,7 +10,7 @@ const tagName = process.env.OMNIDESK_TAG_NAME || `app-v${version}`;
 const releasesRepo = process.env.RELEASES_REPO || "k2safe/OmniDesk";
 const artifactsDir = path.resolve(rootDir, process.env.OMNIDESK_RELEASE_ARTIFACTS || "dist-release");
 const token = (process.env.RELEASES_REPO_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || process.env.TOKEN || "").trim();
-const proxy = (process.env.PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY || "").trim();
+const proxy = (process.env.PROXY ?? process.env.GIT_PROXY ?? "").trim();
 
 if (!token) {
   throw new Error("TOKEN is required for publishing, e.g. make publish-local-release TOKEN=<github_token>");
