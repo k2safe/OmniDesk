@@ -29,6 +29,7 @@ h help:
 		'' \
 		'  make local-mac-release BUMP=patch TOKEN=<github_token>' \
 		'      推荐发版命令：升级版本、本机打 macOS 包、上传公开 Release、推送代码和 app-vX.Y.Z tag。' \
+		'      当前目录不是 git 仓库时，会跳过代码推送，但仍会上传本机 release 产物。' \
 		'' \
 		'  make release BUMP=patch' \
 		'      只升级版本、构建、提交、打 app-vX.Y.Z tag，并推送代码/tag；不会本地打包。' \
@@ -54,10 +55,7 @@ publish-local-release:
 	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/publish-local-release.mjs
 
 local-mac-release:
-	@TOKEN="$(TOKEN)" GIT_PROXY="$(PROXY)" BUMP="$(BUMP)" PUSH=0 node scripts/release.mjs
-	@SIGNING_KEY_PATH="$(SIGNING_KEY_PATH)" TAURI_BUILD_ARGS="$(TAURI_BUILD_ARGS)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/package-local-release.mjs
-	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/publish-local-release.mjs
-	@TOKEN="$(TOKEN)" GIT_PROXY="$(PROXY)" BUMP=current PUSH="$(PUSH)" node scripts/release.mjs
+	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" BUMP="$(BUMP)" PUSH="$(PUSH)" SIGNING_KEY_PATH="$(SIGNING_KEY_PATH)" TAURI_BUILD_ARGS="$(TAURI_BUILD_ARGS)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/local-mac-release.mjs
 
 release:
 	@TOKEN="$(TOKEN)" GIT_PROXY="$(PROXY)" BUMP="$(BUMP)" PUSH="$(PUSH)" node scripts/release.mjs
