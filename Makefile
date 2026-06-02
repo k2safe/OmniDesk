@@ -12,7 +12,7 @@ RELEASES_REPO ?= k2safe/OmniDesk
 SIGNING_KEY_PATH ?= .tauri/omnidesk-updater.key
 TAURI_BUILD_ARGS ?= --bundles app
 
-.PHONY: h help build package local-package publish-local-release desktop-release local-mac-release release push-release create-release-repo github-secrets
+.PHONY: h help build package local-package publish-local-release desktop-release local-mac-release ship release push-release create-release-repo github-secrets
 
 h help:
 	@printf '%s\n' \
@@ -29,8 +29,8 @@ h help:
 		'      把 dist-release 上传到公开仓库 k2safe/OmniDesk 的 GitHub Release。' \
 		'      TOKEN 需要有 k2safe/OmniDesk 的 Contents: Read and write 权限。' \
 		'' \
-		'  make desktop-release TOKEN=<github_token>' \
-		'      推荐发版命令：升级版本、本机打 macOS 包、写入 updates、推送代码/tag、上传公开 Release。' \
+		'  make desktop-release TOKEN=<github_token> / make ship TOKEN=<github_token>' \
+		'      推荐发版命令：升级版本、本机打 macOS 包和 DMG、写入 updates、推送代码/tag、上传公开 Release。' \
 		'      默认 BUMP=patch；也可以指定 VERSION=0.1.6。需要只本地打包可加 PUBLISH=0 PUSH=0。' \
 		'' \
 		'  make release BUMP=patch' \
@@ -56,10 +56,8 @@ package local-package:
 publish-local-release:
 	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/publish-local-release.mjs
 
-desktop-release local-mac-release:
-	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" BUMP="$(if $(VERSION),$(VERSION),$(BUMP))" PUSH="$(PUSH)" PUBLISH=0 SKIP_DMG=1 SIGNING_KEY_PATH="$(SIGNING_KEY_PATH)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/local-mac-release.mjs
-	@sh scripts/create-macos-dmg.sh
-	@if [ "$(PUBLISH)" != "0" ]; then TOKEN="$(TOKEN)" PROXY="$(PROXY)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/publish-local-release.mjs; else echo "GitHub release upload skipped because PUBLISH=0."; fi
+desktop-release local-mac-release ship:
+	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" BUMP="$(if $(VERSION),$(VERSION),$(BUMP))" PUSH="$(PUSH)" PUBLISH="$(PUBLISH)" SKIP_DMG="$(SKIP_DMG)" SIGNING_KEY_PATH="$(SIGNING_KEY_PATH)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/local-mac-release.mjs
 
 release:
 	@TOKEN="$(TOKEN)" GIT_PROXY="$(PROXY)" BUMP="$(BUMP)" PUSH="$(PUSH)" node scripts/release.mjs
