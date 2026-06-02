@@ -1,6 +1,6 @@
 [package]
 name = "omnidesk"
-version = "0.1.6"
+version = "0.1.7"
 description = "Local-first security and productivity desktop toolkit."
 authors = ["OmniDesk"]
 license = ""
