@@ -85,7 +85,11 @@ function repairMacosBundle(platform, shouldBuildDmg) {
 
   fs.rmSync(updaterArchive, { force: true });
   fs.rmSync(updaterSignature, { force: true });
-  run("tar", ["-czf", updaterArchive, "-C", macosDir, appName]);
+  run("tar", ["--disable-copyfile", "-czf", updaterArchive, "-C", macosDir, appName], {
+    env: {
+      COPYFILE_DISABLE: "true"
+    }
+  });
   run("pnpm", ["tauri", "signer", "sign", "-f", signingKeyPath, "-p", "", updaterArchive]);
 
   if (shouldBuildDmg && fs.existsSync(dmgDir) && fs.existsSync(path.join(dmgDir, "bundle_dmg.sh"))) {
