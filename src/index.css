@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@keyframes update-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.update-progress-indeterminate {
+  animation: update-progress-slide 1.1s ease-in-out infinite;
+}
+
+@theme {
+  --color-slate-950: #0a0f18; /* Slightly customized for cosmic slate */
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  background: #0f172a;
+}
+
+:root[data-theme="dark"] body {
+  background: #0f172a;
+}
+
+:root[data-window="quick"],
+:root[data-window="quick"] body,
+:root[data-window="quick"] #root {
+  background: transparent !important;
+}
+
+:root[data-theme="dark"] .bg-slate-50 {
+  background-color: #101827 !important;
+}
+
+:root[data-theme="dark"] .bg-white,
+:root[data-theme="dark"] .bg-white\/70,
+:root[data-theme="dark"] .bg-white\/80 {
+  background-color: rgb(18 27 43 / 0.94) !important;
+}
+
+:root[data-theme="dark"] .bg-slate-100,
+:root[data-theme="dark"] .bg-slate-200 {
+  background-color: #223047 !important;
+}
+
+:root[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgb(6 78 59 / 0.34) !important;
+}
+
+:root[data-theme="dark"] .bg-emerald-50\/70,
+:root[data-theme="dark"] .bg-emerald-50\/80 {
+  background-color: rgb(6 95 70 / 0.42) !important;
+}
+
+:root[data-theme="dark"] .bg-emerald-100 {
+  background-color: rgb(6 95 70 / 0.45) !important;
+}
+
+:root[data-theme="dark"] .bg-red-50 {
+  background-color: rgb(127 29 29 / 0.28) !important;
+}
+
+:root[data-theme="dark"] .bg-red-100 {
+  background-color: rgb(127 29 29 / 0.38) !important;
+}
+
+:root[data-theme="dark"] .bg-slate-800\/50 {
+  background-color: rgb(30 41 59 / 0.62) !important;
+}
+
+:root[data-theme="dark"] .bg-slate-950 {
+  background-color: #07111f !important;
+}
+
+:root[data-theme="dark"] .text-black,
+:root[data-theme="dark"] .text-slate-950,
+:root[data-theme="dark"] .text-slate-900,
+:root[data-theme="dark"] .text-slate-800,
+:root[data-theme="dark"] .text-slate-700 {
+  color: #f1f5f9 !important;
+}
+
+:root[data-theme="dark"] .text-slate-600,
+:root[data-theme="dark"] .text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme="dark"] .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme="dark"] .text-emerald-700,
+:root[data-theme="dark"] .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+:root[data-theme="dark"] .text-red-600,
+:root[data-theme="dark"] .text-red-500 {
+  color: #fca5a5 !important;
+}
+
+:root[data-theme="dark"] .text-red-400 {
+  color: #f87171 !important;
+}
+
+:root[data-theme="dark"] .border-slate-100,
+:root[data-theme="dark"] .border-slate-200,
+:root[data-theme="dark"] .border-slate-300 {
+  border-color: #3a4a63 !important;
+}
+
+:root[data-theme="dark"] .border-emerald-100,
+:root[data-theme="dark"] .border-emerald-200,
+:root[data-theme="dark"] .border-emerald-300\/20 {
+  border-color: rgb(16 185 129 / 0.35) !important;
+}
+
+:root[data-theme="dark"] .border-red-100,
+:root[data-theme="dark"] .border-red-200 {
+  border-color: rgb(248 113 113 / 0.42) !important;
+}
+
+:root[data-theme="dark"] .shadow-xl,
+:root[data-theme="dark"] .shadow-2xl,
+:root[data-theme="dark"] .shadow-sm {
+  --tw-shadow-color: rgb(0 0 0 / 0.45);
+}
+
+:root[data-theme="dark"] .from-emerald-50 {
+  --tw-gradient-from: #052e2b var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(5 46 43 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+:root[data-theme="dark"] .via-white {
+  --tw-gradient-via: #0f172a var(--tw-gradient-via-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important;
+}
+
+:root[data-theme="dark"] .to-teal-50 {
+  --tw-gradient-to: #042f2e var(--tw-gradient-to-position) !important;
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select {
+  background-color: #111c2e;
+  border-color: #3a4a63;
+  color: #e5e7eb;
+}
+
+:root[data-theme="dark"] ::placeholder {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .prose,
+:root[data-theme="dark"] .prose :where(p, li, blockquote, td, th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .prose :where(h1, h2, h3, h4, strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .prose :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  color: #6ee7b7;
+  background-color: rgb(6 78 59 / 0.34);
+}
+
+:root[data-theme="dark"] .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  background-color: #07111f;
+  border-color: #3a4a63;
+}

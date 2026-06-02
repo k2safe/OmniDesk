@@ -1,0 +1,194 @@
+name: Build Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "选择要打包的平台；日常建议只选需要的平台，避免消耗 Actions 额度。"
+        required: true
+        default: "macos-aarch64"
+        type: choice
+        options:
+          - windows-x86_64
+          - windows-aarch64
+          - macos-x86_64
+          - macos-aarch64
+          - all
+
+jobs:
+  build-desktop:
+    name: Build ${{ matrix.name }}
+    if: ${{ inputs.platform == 'all' || inputs.platform == matrix.platformId }}
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platformId: windows-x86_64
+            updaterPlatform: windows-x86_64
+            os: windows-latest
+            rustTarget: ""
+            bundleRoot: src-tauri/target/release/bundle
+            args: --bundles nsis
+          - name: Windows ARM64
+            platformId: windows-aarch64
+            updaterPlatform: windows-aarch64
+            os: windows-11-arm
+            rustTarget: aarch64-pc-windows-msvc
+            bundleRoot: src-tauri/target/aarch64-pc-windows-msvc/release/bundle
+            args: --target aarch64-pc-windows-msvc --bundles nsis
+          - name: macOS Intel
+            platformId: macos-x86_64
+            updaterPlatform: darwin-x86_64
+            os: macos-15-intel
+            rustTarget: x86_64-apple-darwin
+            bundleRoot: src-tauri/target/x86_64-apple-darwin/release/bundle
+            args: --target x86_64-apple-darwin --bundles dmg,app
+          - name: macOS Apple Silicon
+            platformId: macos-aarch64
+            updaterPlatform: darwin-aarch64
+            os: macos-15
+            rustTarget: aarch64-apple-darwin
+            bundleRoot: src-tauri/target/aarch64-apple-darwin/release/bundle
+            args: --target aarch64-apple-darwin --bundles dmg,app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust target
+        if: matrix.rustTarget != ''
+        run: rustup target add ${{ matrix.rustTarget }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Write updater signing key
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY secret is empty or missing. Add it to the private OmniDesk repository secrets."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/tauri"
+          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/tauri/updater.key"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      - name: Verify updater signing key
+        shell: bash
+        run: |
+          printf test > "$RUNNER_TEMP/tauri/sign-test"
+          pnpm tauri signer sign "$RUNNER_TEMP/tauri/sign-test" >/dev/null
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Build desktop installer
+        run: pnpm tauri build ${{ matrix.args }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ runner.temp }}/tauri/updater.key
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Collect release assets
+        run: node scripts/collect-release-assets.mjs
+        env:
+          OMNIDESK_PLATFORM_ID: ${{ matrix.platformId }}
+          OMNIDESK_UPDATER_PLATFORM: ${{ matrix.updaterPlatform }}
+          OMNIDESK_BUNDLE_ROOT: ${{ matrix.bundleRoot }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platformId }}
+          path: dist-release/**
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish public release
+    runs-on: ubuntu-latest
+    needs: build-desktop
+    if: ${{ always() && needs.build-desktop.result == 'success' }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=app-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create updater latest.json
+        run: node scripts/create-updater-latest.mjs release-artifacts
+        env:
+          OMNIDESK_RELEASE_REPO: k2safe/OmniDesk-releases
+          OMNIDESK_TAG_NAME: ${{ steps.version.outputs.tag }}
+          OMNIDESK_REQUIRED_PLATFORMS: ${{ inputs.platform == 'all' && 'windows-x86_64,windows-aarch64,darwin-x86_64,darwin-aarch64' || '' }}
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          RELEASES_REPO: k2safe/OmniDesk-releases
+          TAG_NAME: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "RELEASES_REPO_TOKEN secret is empty or missing."
+            exit 1
+          fi
+
+          if gh release view "$TAG_NAME" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --repo "$RELEASES_REPO" \
+              --title "OmniDesk v$VERSION" \
+              --notes "Installers are named by OS and CPU. Download .dmg for macOS or -setup.exe for Windows. .app.tar.gz, .sig, and latest.json are updater artifacts."
+          else
+            gh release create "$TAG_NAME" --repo "$RELEASES_REPO" \
+              --target main \
+              --title "OmniDesk v$VERSION" \
+              --notes "Installers are named by OS and CPU. Download .dmg for macOS or -setup.exe for Windows. .app.tar.gz, .sig, and latest.json are updater artifacts."
+          fi
+
+          mapfile -t release_files < <(find release-artifacts -type f ! -name 'metadata-*.json' | sort)
+          if [ "${#release_files[@]}" -eq 0 ]; then
+            echo "No release files found."
+            exit 1
+          fi
+
+          gh release upload "$TAG_NAME" "${release_files[@]}" --repo "$RELEASES_REPO" --clobber
