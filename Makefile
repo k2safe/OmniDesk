@@ -2,15 +2,17 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := h
 
 BUMP ?= patch
+VERSION ?=
 PROXY ?= http://127.0.0.1:10021
 TOKEN ?=
 PUSH ?= 1
+PUBLISH ?= 1
 REPO ?= k2safe/OmniDesk
 RELEASES_REPO ?= k2safe/OmniDesk
 SIGNING_KEY_PATH ?= .tauri/omnidesk-updater.key
 TAURI_BUILD_ARGS ?= --bundles app
 
-.PHONY: h help build package local-package publish-local-release local-mac-release release push-release create-release-repo github-secrets
+.PHONY: h help build package local-package publish-local-release desktop-release local-mac-release release push-release create-release-repo github-secrets
 
 h help:
 	@printf '%s\n' \
@@ -27,9 +29,9 @@ h help:
 		'      把 dist-release 上传到公开仓库 k2safe/OmniDesk 的 GitHub Release。' \
 		'      TOKEN 需要有 k2safe/OmniDesk 的 Contents: Read and write 权限。' \
 		'' \
-		'  make local-mac-release BUMP=patch TOKEN=<github_token>' \
-		'      推荐发版命令：升级版本、本机打 macOS 包、上传公开 Release、推送代码和 app-vX.Y.Z tag。' \
-		'      当前目录不是 git 仓库时，会跳过代码推送，但仍会上传本机 release 产物。' \
+		'  make desktop-release TOKEN=<github_token>' \
+		'      推荐发版命令：升级版本、本机打 macOS 包、写入 updates、推送代码/tag、上传公开 Release。' \
+		'      默认 BUMP=patch；也可以指定 VERSION=0.1.6。需要只本地打包可加 PUBLISH=0 PUSH=0。' \
 		'' \
 		'  make release BUMP=patch' \
 		'      只升级版本、构建、提交、打 app-vX.Y.Z tag，并推送代码/tag；不会本地打包。' \
@@ -54,8 +56,10 @@ package local-package:
 publish-local-release:
 	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/publish-local-release.mjs
 
-local-mac-release:
-	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" BUMP="$(BUMP)" PUSH="$(PUSH)" SIGNING_KEY_PATH="$(SIGNING_KEY_PATH)" TAURI_BUILD_ARGS="$(TAURI_BUILD_ARGS)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/local-mac-release.mjs
+desktop-release local-mac-release:
+	@TOKEN="$(TOKEN)" PROXY="$(PROXY)" BUMP="$(if $(VERSION),$(VERSION),$(BUMP))" PUSH="$(PUSH)" PUBLISH=0 SKIP_DMG=1 SIGNING_KEY_PATH="$(SIGNING_KEY_PATH)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/local-mac-release.mjs
+	@sh scripts/create-macos-dmg.sh
+	@if [ "$(PUBLISH)" != "0" ]; then TOKEN="$(TOKEN)" PROXY="$(PROXY)" RELEASES_REPO="$(RELEASES_REPO)" node scripts/publish-local-release.mjs; else echo "GitHub release upload skipped because PUBLISH=0."; fi
 
 release:
 	@TOKEN="$(TOKEN)" GIT_PROXY="$(PROXY)" BUMP="$(BUMP)" PUSH="$(PUSH)" node scripts/release.mjs

@@ -43,4 +43,13 @@ const cargoTomlPath = path.join(rootDir, "src-tauri/Cargo.toml");
 const cargoToml = fs.readFileSync(cargoTomlPath, "utf8");
 fs.writeFileSync(cargoTomlPath, cargoToml.replace(/^version = ".+"/m, `version = "${version}"`));
 
+const cargoLockPath = path.join(rootDir, "src-tauri/Cargo.lock");
+if (fs.existsSync(cargoLockPath)) {
+  const cargoLock = fs.readFileSync(cargoLockPath, "utf8");
+  fs.writeFileSync(
+    cargoLockPath,
+    cargoLock.replace(/(\[\[package\]\]\nname = "omnidesk"\nversion = ")[^"]+(")/, `$1${version}$2`)
+  );
+}
+
 console.log(`OmniDesk version bumped to ${version}`);
