@@ -17,9 +17,20 @@ import { SecuritySettings } from "./components/SecuritySettings";
 import { CommonSettings } from "./components/CommonSettings";
 import { ExportNotice } from "./components/ExportNotice";
 import { MasterPasswordPrompt, type MasterPasswordRequest } from "./components/MasterPasswordPrompt";
-import { getSystemIdleMillis, isDesktopRuntime, lockWorkspace, setGlobalShortcuts, setMasterPasswordRequestHandler, startWindowDrag, toggleQuickPanel, unlockWorkspace } from "./lib/desktop";
-import { loadOmniStore, OmniStoreProvider, saveOmniStore, useOmniStore, useStoreField } from "./lib/store";
+import { getSystemIdleMillis, isDesktopRuntime, lockWorkspace, setGlobalShortcuts, setMasterPasswordRequestHandler, startWindowDrag, toggleQuickPanel } from "./lib/desktop";
+import { OmniStoreProvider, saveOmniStore, unlockAndLoadOmniStore, useOmniStore, useStoreField } from "./lib/store";
 import type { OmniStore, ThemeMode } from "./lib/store";
+
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  });
+}
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -31,8 +42,11 @@ export default function App() {
   const handleUnlock = async (password: string) => {
     try {
       setUnlockError("");
-      await unlockWorkspace(password);
-      const loadedStore = await loadOmniStore();
+      const loadedStore = await withTimeout(
+        unlockAndLoadOmniStore(password),
+        30_000,
+        "解锁或加载本地数据超时，请重启 OmniDesk 后再试",
+      );
       setStore(loadedStore);
       setIsLocked(false);
     } catch (error) {

@@ -59,6 +59,11 @@ export interface ChromeBookmarkImportResult {
   profiles: string[];
 }
 
+export interface CachedBookmarkIcon {
+  iconUrl: string;
+  fileName: string;
+}
+
 type MasterPasswordRequestHandler = (reason: string) => Promise<boolean>;
 
 type NoteSearchRecord = Pick<NoteEntry, "id" | "title" | "content" | "tags">;
@@ -86,6 +91,13 @@ async function invokeDesktop<T>(command: string, args?: Record<string, unknown>)
 export async function unlockWorkspace(password: string) {
   if (!isDesktopRuntime()) return;
   await invokeDesktop<void>("unlock", { password });
+}
+
+export async function unlockAndLoadEncryptedStore<T>(password: string) {
+  if (!isDesktopRuntime()) {
+    return memoryStore as T;
+  }
+  return invokeDesktop<T>("unlock_and_load_store", { password });
 }
 
 export async function changeMasterPassword(currentPassword: string, newPassword: string) {
@@ -321,6 +333,16 @@ export async function importChromeBookmarks() {
     throw new Error("Chrome 书签导入只能在桌面版使用。");
   }
   return invokeDesktop<ChromeBookmarkImportResult>("import_chrome_bookmarks");
+}
+
+export async function cacheBookmarkIcon(url: string, iconUrl?: string) {
+  if (!isDesktopRuntime()) return null;
+  return invokeDesktop<CachedBookmarkIcon | null>("cache_bookmark_icon", { url, iconUrl });
+}
+
+export async function readBookmarkIcon(src: string) {
+  if (!isDesktopRuntime()) return src;
+  return invokeDesktop<string>("read_bookmark_icon", { src });
 }
 
 function searchNoteIdsLocally(query: string, notes: NoteSearchRecord[]) {

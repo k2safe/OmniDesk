@@ -41,6 +41,11 @@
   background-color: #101827 !important;
 }
 
+:root[data-theme="dark"] .bg-slate-50\/70,
+:root[data-theme="dark"] .bg-slate-50\/80 {
+  background-color: rgb(16 24 39 / 0.78) !important;
+}
+
 :root[data-theme="dark"] .bg-white,
 :root[data-theme="dark"] .bg-white\/70,
 :root[data-theme="dark"] .bg-white\/80 {

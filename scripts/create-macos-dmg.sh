@@ -14,7 +14,7 @@ fi
 APP_PATH="${ROOT_DIR}/src-tauri/target/release/bundle/macos/OmniDesk.app"
 DIST_DIR="${ROOT_DIR}/dist-release"
 DMG_PATH="${DIST_DIR}/OmniDesk-v${VERSION}-${PLATFORM_ID}.dmg"
-STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omnidesk-dmg.XXXXXX")"
+STAGING_DIR="$(mktemp -d "/private/tmp/omnidesk-dmg.XXXXXX")"
 
 cleanup() {
   rm -rf "${STAGING_DIR}"
@@ -30,8 +30,5 @@ mkdir -p "${DIST_DIR}"
 cp -R "${APP_PATH}" "${STAGING_DIR}/OmniDesk.app"
 ln -s /Applications "${STAGING_DIR}/Applications"
 
-if hdiutil create -volname OmniDesk -srcfolder "${STAGING_DIR}" -ov -format UDZO "${DMG_PATH}"; then
-  echo "Created ${DMG_PATH}"
-else
-  osascript -e "do shell script \"hdiutil create -volname OmniDesk -srcfolder '${STAGING_DIR}' -ov -format UDZO '${DMG_PATH}'\""
-fi
+osascript -e "do shell script \"hdiutil create -volname OmniDesk -srcfolder ${STAGING_DIR} -ov -format UDZO ${DMG_PATH}\"" < /dev/null
+echo "Created ${DMG_PATH}"

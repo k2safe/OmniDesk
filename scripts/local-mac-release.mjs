@@ -98,7 +98,7 @@ function buildSimpleDmg(version, platformId) {
     const direct = run("hdiutil", args, { allowFailure: true });
     if (direct.status !== 0) {
       const appleScript = `do shell script ${appleScriptString(commandLine("hdiutil", args))}`;
-      run("/bin/bash", ["-lc", `osascript -e ${shellQuote(appleScript)}`]);
+      run("osascript", ["-e", appleScript]);
     }
   } finally {
     fs.rmSync(stagingDir, { recursive: true, force: true });

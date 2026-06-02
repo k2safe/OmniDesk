@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { OmniDeskLogo } from "./OmniDeskLogo";
+import { getCurrentAppVersion } from "../lib/updater";
 
 interface LockScreenProps {
   onUnlock: (password: string) => Promise<void>;
@@ -11,20 +12,39 @@ interface LockScreenProps {
 export function LockScreen({ onUnlock, unlockError }: LockScreenProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
+  const [localError, setLocalError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    void getCurrentAppVersion()
+      .then((version) => setAppVersion(version))
+      .catch(() => setAppVersion(""));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || isSubmitting) return;
 
     setIsSubmitting(true);
+    setLocalError("");
+    const timeoutId = window.setTimeout(() => {
+      setLocalError("解锁响应超时，请重启 OmniDesk 后再试");
+      setError(true);
+      setPassword("");
+      setIsSubmitting(false);
+      window.setTimeout(() => setError(false), 500);
+    }, 25_000);
+
     try {
       await onUnlock(password);
-    } catch {
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "主密码错误");
       setError(true);
       setTimeout(() => setError(false), 500);
       setPassword("");
     } finally {
+      window.clearTimeout(timeoutId);
       setIsSubmitting(false);
     }
   };
@@ -74,7 +94,7 @@ export function LockScreen({ onUnlock, unlockError }: LockScreenProps) {
                   exit={{ opacity: 0, height: 0 }} 
                   className="text-red-500 text-xs font-medium px-1"
                 >
-                  {unlockError || "主密码错误"}
+                  {localError || unlockError || "主密码错误"}
                 </motion.p>
               )}
             </AnimatePresence>
@@ -90,7 +110,7 @@ export function LockScreen({ onUnlock, unlockError }: LockScreenProps) {
         
         <div className="text-center mt-6 text-slate-400 text-xs font-mono">
           <p>系统状态：安全 (SECURE)</p>
-          <p className="mt-1">环境：本地完全离线</p>
+          <p className="mt-1">环境：本地完全离线{appVersion ? ` · v${appVersion}` : ""}</p>
         </div>
       </motion.div>
     </div>

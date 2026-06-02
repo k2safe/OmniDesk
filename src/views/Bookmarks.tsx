@@ -3,7 +3,7 @@ import { Search, Plus, ExternalLink, Trash2, Tag, Bookmark as BookmarkIcon, X, P
 import { BookmarkEntry } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
-import { exportJson, importChromeBookmarks, importJson, loadEncryptedStore, openExternalUrl, searchBookmarks, writeClipboard } from "../lib/desktop";
+import { cacheBookmarkIcon, exportJson, importChromeBookmarks, importJson, loadEncryptedStore, openExternalUrl, readBookmarkIcon, searchBookmarks, writeClipboard } from "../lib/desktop";
 import { useStoreField } from "../lib/store";
 import { OptionSelect, type OptionItem } from "../components/OptionSelect";
 
@@ -47,6 +47,11 @@ const CHROME_ROOT_GROUPS = new Set([
 ]);
 const UNGROUPED_GROUP_KEY = "__omnidesk_ungrouped__";
 const NO_GROUP_VALUE = "__omnidesk_no_group__";
+const BOOKMARK_ICON_PREFIX = "omnidesk-asset://bookmark-icons/";
+
+function isLocalBookmarkIconUrl(value?: string) {
+  return Boolean(value?.startsWith(BOOKMARK_ICON_PREFIX));
+}
 
 function stripChromeRootGroupPath(path: string[], shouldStrip: boolean) {
   if (!shouldStrip || path.length === 0) return path;
@@ -211,23 +216,70 @@ function flattenGroupNodes(node: GroupNode): GroupNode[] {
   return node.children.flatMap((child) => [child, ...flattenGroupNodes(child)]);
 }
 
-function BookmarkLogo({ bookmark }: { bookmark: BookmarkEntry }) {
+function BookmarkLogo({
+  bookmark,
+  onIconCached,
+}: {
+  bookmark: BookmarkEntry;
+  onIconCached: (id: string, iconUrl: string) => void;
+}) {
   const candidates = useMemo(
     () => getBookmarkIconCandidates(bookmark.url, bookmark.iconUrl),
     [bookmark.url, bookmark.iconUrl],
   );
   const [candidateIndex, setCandidateIndex] = useState(0);
+  const [displaySrc, setDisplaySrc] = useState("");
   const src = candidates[candidateIndex];
 
   useEffect(() => {
     setCandidateIndex(0);
   }, [bookmark.url, bookmark.iconUrl]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setDisplaySrc("");
+    if (!src) return () => {
+      cancelled = true;
+    };
+
+    if (isLocalBookmarkIconUrl(src)) {
+      void readBookmarkIcon(src)
+        .then((dataUrl) => {
+          if (!cancelled) setDisplaySrc(dataUrl);
+        })
+        .catch(() => {
+          if (!cancelled) setCandidateIndex((index) => index + 1);
+        });
+    } else {
+      setDisplaySrc(src);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void cacheBookmarkIcon(bookmark.url, bookmark.iconUrl)
+      .then((cached) => {
+        if (!cancelled && cached?.iconUrl && cached.iconUrl !== bookmark.iconUrl) {
+          onIconCached(bookmark.id, cached.iconUrl);
+        }
+      })
+      .catch(() => {
+        // Favicon cache is opportunistic; the bookmark itself must still render offline.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookmark.id, bookmark.url, bookmark.iconUrl, onIconCached]);
+
   return (
     <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0 overflow-hidden relative">
-      {src ? (
+      {displaySrc ? (
         <img
-          src={src}
+          src={displaySrc}
           alt=""
           className="w-5 h-5 object-contain"
           onError={() => setCandidateIndex((index) => index + 1)}
@@ -300,6 +352,14 @@ export function Bookmarks() {
   const removeBookmark = (id: string) => {
     setBookmarks(bookmarks.filter(b => b.id !== id));
   };
+
+  const markBookmarkIconCached = useCallback((id: string, iconUrl: string) => {
+    setBookmarks((current) => current.map((bookmark) => (
+      bookmark.id === id && bookmark.iconUrl !== iconUrl
+        ? { ...bookmark, iconUrl }
+        : bookmark
+    )));
+  }, [setBookmarks]);
 
   const moveBookmarkToGroup = useCallback((id: string, groupPath: string[]) => {
     setBookmarks((current) => current.map((bookmark) => (
@@ -1031,7 +1091,7 @@ export function Bookmarks() {
                    <div>
                       <div className="mb-2 flex min-w-0 items-start justify-between gap-3">
                          <div className="flex min-w-0 items-center gap-2">
-                            <BookmarkLogo bookmark={b} />
+                            <BookmarkLogo bookmark={b} onIconCached={markBookmarkIconCached} />
                             <h3 className="min-w-0 truncate font-medium text-slate-900" title={b.title}>{b.title}</h3>
                          </div>
                          <div className="flex shrink-0 gap-1">

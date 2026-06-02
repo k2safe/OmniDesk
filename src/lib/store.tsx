@@ -11,7 +11,7 @@ import {
   TOTPEntry,
   View,
 } from "../types";
-import { loadEncryptedStore, saveEncryptedStore, saveEncryptedStoreItem } from "./desktop";
+import { loadEncryptedStore, saveEncryptedStore, saveEncryptedStoreItem, unlockAndLoadEncryptedStore } from "./desktop";
 
 const VALID_VIEWS: View[] = ["vault", "totp", "bookmarks", "notes", "snippets", "subscriptions", "devtools", "pomodoro"];
 
@@ -199,6 +199,11 @@ export function normalizeStore(value: unknown): OmniStore {
 
 export async function loadOmniStore() {
   const encryptedStore = await loadEncryptedStore<unknown>();
+  return normalizeStore(encryptedStore);
+}
+
+export async function unlockAndLoadOmniStore(password: string) {
+  const encryptedStore = await unlockAndLoadEncryptedStore<unknown>(password);
   return normalizeStore(encryptedStore);
 }
 

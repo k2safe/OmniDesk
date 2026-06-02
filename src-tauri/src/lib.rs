@@ -10,14 +10,16 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::{
-  collections::HashSet,
+  collections::{hash_map::DefaultHasher, HashSet},
   fs,
+  hash::{Hash, Hasher},
   io::{Read, Write},
   net::{TcpListener, TcpStream, UdpSocket},
   path::PathBuf,
   process::Command,
   sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
+    mpsc,
     Arc, Mutex,
   },
   thread,
@@ -36,6 +38,9 @@ const VERIFIER_TEXT: &[u8] = b"omnidesk-master-verifier-v1";
 const NOTE_ASSET_DIR: &str = "note-assets";
 const NOTE_ASSET_PREFIX: &str = "omnidesk-asset://note-assets/";
 const MAX_NOTE_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+const BOOKMARK_ICON_DIR: &str = "bookmark-icons";
+const BOOKMARK_ICON_PREFIX: &str = "omnidesk-asset://bookmark-icons/";
+const MAX_BOOKMARK_ICON_BYTES: usize = 1024 * 1024;
 const VAULT_FILE_DIR: &str = "vault-files";
 const MAX_VAULT_FILE_BYTES: usize = 100 * 1024 * 1024;
 const COLOR_SAMPLE_DIR: &str = "color-samples";
@@ -44,6 +49,7 @@ const EXPORT_DIR: &str = "OmniDesk Exports";
 const MIGRATION_MANIFEST: &str = "omnidesk-migration.json";
 const MIGRATION_RESOURCE_DIRS: &[&str] = &[
   NOTE_ASSET_DIR,
+  BOOKMARK_ICON_DIR,
   VAULT_FILE_DIR,
   COLOR_SAMPLE_DIR,
   LOCAL_DROP_DIR,
@@ -60,6 +66,22 @@ struct RuntimeState {
 }
 
 type AppState = Arc<RuntimeState>;
+
+fn run_with_timeout<T, F>(label: &'static str, timeout: Duration, task: F) -> Result<T, String>
+where
+  T: Send + 'static,
+  F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+  let (tx, rx) = mpsc::channel();
+  thread::spawn(move || {
+    let _ = tx.send(task());
+  });
+  match rx.recv_timeout(timeout) {
+    Ok(result) => result,
+    Err(mpsc::RecvTimeoutError::Timeout) => Err(format!("{label}超时，请重启 OmniDesk 后再试")),
+    Err(mpsc::RecvTimeoutError::Disconnected) => Err(format!("{label}任务异常，请重启 OmniDesk 后再试")),
+  }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MasterRecord {
@@ -81,6 +103,13 @@ struct EncryptedPayload {
 #[serde(rename_all = "camelCase")]
 struct SavedNoteImage {
   markdown_src: String,
+  file_name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CachedBookmarkIcon {
+  icon_url: String,
   file_name: String,
 }
 
@@ -792,6 +821,12 @@ fn note_assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
   Ok(dir)
 }
 
+fn bookmark_icons_dir(app: &AppHandle) -> Result<PathBuf, String> {
+  let dir = app_data_dir(app)?.join(BOOKMARK_ICON_DIR);
+  fs::create_dir_all(&dir).map_err(|err| format!("无法创建书签图标目录: {err}"))?;
+  Ok(dir)
+}
+
 fn vault_files_dir(app: &AppHandle) -> Result<PathBuf, String> {
   let dir = app_data_dir(app)?.join(VAULT_FILE_DIR);
   fs::create_dir_all(&dir).map_err(|err| format!("无法创建保险箱文件目录: {err}"))?;
@@ -1016,8 +1051,143 @@ fn mime_from_extension(extension: &str) -> &'static str {
     "webp" => "image/webp",
     "bmp" => "image/bmp",
     "svg" => "image/svg+xml",
+    "ico" => "image/x-icon",
     _ => "application/octet-stream",
   }
+}
+
+fn is_local_bookmark_icon_url(value: &str) -> bool {
+  value.starts_with(BOOKMARK_ICON_PREFIX)
+}
+
+fn bookmark_icon_file_name(src: &str) -> Result<&str, String> {
+  let file_name = src
+    .strip_prefix(BOOKMARK_ICON_PREFIX)
+    .ok_or_else(|| "不是 OmniDesk 本地书签图标".to_string())?;
+  if !is_safe_asset_file_name(file_name) {
+    return Err("书签图标文件名无效".to_string());
+  }
+  Ok(file_name)
+}
+
+fn bookmark_icon_candidates(url: &str, icon_url: Option<&str>) -> Vec<String> {
+  let mut seen = HashSet::new();
+  let mut candidates = Vec::new();
+  let mut push_candidate = |value: String| {
+    if seen.insert(value.clone()) {
+      candidates.push(value);
+    }
+  };
+
+  if let Some(icon_url) = icon_url.map(str::trim).filter(|value| !value.is_empty()) {
+    if !is_local_bookmark_icon_url(icon_url) {
+      if let Some(normalized) = normalize_import_url(icon_url) {
+        push_candidate(normalized);
+      }
+    }
+  }
+
+  let Ok(parsed) = Url::parse(url.trim()) else {
+    return candidates;
+  };
+  if !matches!(parsed.scheme(), "http" | "https") {
+    return candidates;
+  }
+  let Some(host) = parsed.host_str() else {
+    return candidates;
+  };
+  let origin = if let Some(port) = parsed.port() {
+    format!("{}://{}:{port}", parsed.scheme(), host)
+  } else {
+    format!("{}://{}", parsed.scheme(), host)
+  };
+
+  for path in ["/favicon.ico", "/favicon.png", "/apple-touch-icon.png"] {
+    push_candidate(format!("{origin}{path}"));
+  }
+
+  candidates
+}
+
+fn bookmark_icon_extension_from_url(source: &str) -> Option<&'static str> {
+  let parsed = Url::parse(source).ok()?;
+  let extension = std::path::Path::new(parsed.path())
+    .extension()
+    .and_then(|value| value.to_str())?
+    .to_ascii_lowercase();
+  match extension.as_str() {
+    "png" => Some("png"),
+    "jpg" | "jpeg" => Some("jpg"),
+    "gif" => Some("gif"),
+    "webp" => Some("webp"),
+    "ico" => Some("ico"),
+    "svg" => Some("svg"),
+    _ => None,
+  }
+}
+
+fn bookmark_icon_extension(bytes: &[u8], source: &str) -> Option<&'static str> {
+  if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+    return Some("png");
+  }
+  if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+    return Some("jpg");
+  }
+  if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+    return Some("gif");
+  }
+  if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+    return Some("webp");
+  }
+  if bytes.starts_with(&[0, 0, 1, 0]) || bytes.starts_with(&[0, 0, 2, 0]) {
+    return Some("ico");
+  }
+  let head = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]);
+  if head.trim_start().to_ascii_lowercase().starts_with("<svg") {
+    return Some("svg");
+  }
+  bookmark_icon_extension_from_url(source)
+}
+
+fn bookmark_icon_cache_file_name(source: &str, extension: &str) -> String {
+  let mut hasher = DefaultHasher::new();
+  source.hash(&mut hasher);
+  format!("bookmark-icon-{:016x}.{extension}", hasher.finish())
+}
+
+fn download_bookmark_icon(source: &str) -> Result<Vec<u8>, String> {
+  let max_size = MAX_BOOKMARK_ICON_BYTES.to_string();
+  let output = Command::new("/usr/bin/curl")
+    .args([
+      "--location",
+      "--fail",
+      "--silent",
+      "--show-error",
+      "--connect-timeout",
+      "3",
+      "--max-time",
+      "6",
+      "--max-filesize",
+      max_size.as_str(),
+      "--user-agent",
+      "OmniDesk/1.0",
+      "--header",
+      "Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      source,
+    ])
+    .output()
+    .map_err(|err| format!("下载书签图标失败: {err}"))?;
+
+  if !output.status.success() {
+    return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+  }
+  if output.stdout.is_empty() {
+    return Err("书签图标内容为空".to_string());
+  }
+  if output.stdout.len() > MAX_BOOKMARK_ICON_BYTES {
+    return Err("书签图标超过 1MB".to_string());
+  }
+  Ok(output.stdout)
 }
 
 fn is_safe_asset_file_name(file_name: &str) -> bool {
@@ -1050,7 +1220,8 @@ fn init_database(conn: &Connection) -> Result<(), String> {
   conn
     .execute_batch(
       r#"
-      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 2000;
+      PRAGMA journal_mode = DELETE;
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
@@ -1913,8 +2084,7 @@ fn write_master_record(conn: &Connection, record: &MasterRecord) -> Result<(), S
   Ok(())
 }
 
-#[tauri::command]
-fn unlock(app: AppHandle, state: State<AppState>, password: String) -> Result<(), String> {
+fn unlock_inner(app: AppHandle, state: AppState, password: String) -> Result<(), String> {
   if password.trim().is_empty() {
     return Err("主密码不能为空".to_string());
   }
@@ -1939,6 +2109,12 @@ fn unlock(app: AppHandle, state: State<AppState>, password: String) -> Result<()
     .lock()
     .map_err(|_| "无法初始化 Rust 内存缓存".to_string())? = None;
   Ok(())
+}
+
+#[tauri::command]
+fn unlock(app: AppHandle, state: State<AppState>, password: String) -> Result<(), String> {
+  let state = state.inner().clone();
+  run_with_timeout("解锁", Duration::from_secs(15), move || unlock_inner(app, state, password))
 }
 
 #[tauri::command]
@@ -2012,8 +2188,7 @@ fn lock_store(app: AppHandle, state: State<AppState>) -> Result<(), String> {
   Ok(())
 }
 
-#[tauri::command]
-fn load_store(app: AppHandle, state: State<AppState>) -> Result<Value, String> {
+fn load_store_inner(app: AppHandle, state: AppState) -> Result<Value, String> {
   if let Some(cache) = state
     .cache
     .lock()
@@ -2023,20 +2198,29 @@ fn load_store(app: AppHandle, state: State<AppState>) -> Result<Value, String> {
     return Ok(Value::Object(cache));
   }
 
-  let key = current_key(state.inner().as_ref())?;
+  let key = current_key(state.as_ref())?;
   let mut store = load_store_map(&app, &key)?;
   merge_persisted_shortcuts_into_store(&app, &mut store);
-  if let Some(notes) = store.get("notes") {
-    sync_notes_fts_best_effort(&app, notes);
-  }
-  if let Some(bookmarks) = store.get("bookmarks") {
-    sync_bookmarks_fts_best_effort(&app, bookmarks);
-  }
   *state
     .cache
     .lock()
     .map_err(|_| "无法写入 Rust 内存缓存".to_string())? = Some(store.clone());
   Ok(Value::Object(store))
+}
+
+#[tauri::command]
+fn load_store(app: AppHandle, state: State<AppState>) -> Result<Value, String> {
+  let state = state.inner().clone();
+  run_with_timeout("加载本地数据", Duration::from_secs(20), move || load_store_inner(app, state))
+}
+
+#[tauri::command]
+fn unlock_and_load_store(app: AppHandle, state: State<AppState>, password: String) -> Result<Value, String> {
+  let state = state.inner().clone();
+  run_with_timeout("解锁并加载本地数据", Duration::from_secs(25), move || {
+    unlock_inner(app.clone(), state.clone(), password)?;
+    load_store_inner(app, state)
+  })
 }
 
 #[tauri::command]
@@ -2558,6 +2742,61 @@ fn import_chrome_bookmarks(
     skipped,
     profiles,
   })
+}
+
+#[tauri::command]
+fn cache_bookmark_icon(
+  app: AppHandle,
+  url: String,
+  icon_url: Option<String>,
+) -> Result<Option<CachedBookmarkIcon>, String> {
+  if let Some(local_icon_url) = icon_url.as_deref().filter(|value| is_local_bookmark_icon_url(value)) {
+    let file_name = bookmark_icon_file_name(local_icon_url)?;
+    if bookmark_icons_dir(&app)?.join(file_name).exists() {
+      return Ok(Some(CachedBookmarkIcon {
+        icon_url: local_icon_url.to_string(),
+        file_name: file_name.to_string(),
+      }));
+    }
+  }
+
+  let candidates = bookmark_icon_candidates(&url, icon_url.as_deref());
+  let icon_dir = bookmark_icons_dir(&app)?;
+  for candidate in candidates {
+    let Ok(bytes) = download_bookmark_icon(&candidate) else {
+      continue;
+    };
+    let Some(extension) = bookmark_icon_extension(&bytes, &candidate) else {
+      continue;
+    };
+    let file_name = bookmark_icon_cache_file_name(&candidate, extension);
+    let path = icon_dir.join(&file_name);
+    if !path.exists() {
+      fs::write(&path, bytes).map_err(|err| format!("写入书签图标失败: {err}"))?;
+    }
+    return Ok(Some(CachedBookmarkIcon {
+      icon_url: format!("{BOOKMARK_ICON_PREFIX}{file_name}"),
+      file_name,
+    }));
+  }
+
+  Ok(None)
+}
+
+#[tauri::command]
+fn read_bookmark_icon(app: AppHandle, src: String) -> Result<String, String> {
+  let file_name = bookmark_icon_file_name(&src)?;
+  let path = bookmark_icons_dir(&app)?.join(file_name);
+  let bytes = fs::read(&path).map_err(|err| format!("读取书签图标失败: {err}"))?;
+  let extension = path
+    .extension()
+    .and_then(|value| value.to_str())
+    .unwrap_or_default();
+  let mime_type = mime_from_extension(extension);
+  Ok(format!(
+    "data:{mime_type};base64,{}",
+    general_purpose::STANDARD.encode(bytes),
+  ))
 }
 
 #[tauri::command]
@@ -3236,6 +3475,7 @@ pub fn run() {
       verify_password,
       lock_store,
       load_store,
+      unlock_and_load_store,
       save_store,
       save_store_item,
       system_idle_millis,
@@ -3247,6 +3487,8 @@ pub fn run() {
       export_bytes,
       import_json,
       import_chrome_bookmarks,
+      cache_bookmark_icon,
+      read_bookmark_icon,
       search_notes,
       search_bookmarks,
       toggle_quick_panel,
