@@ -18,6 +18,13 @@ export async function checkForUpdate() {
   return check();
 }
 
+export async function getCurrentAppVersion() {
+  if (!canUseNativeUpdater()) return "开发预览";
+
+  const { getVersion } = await import("@tauri-apps/api/app");
+  return getVersion();
+}
+
 export async function downloadInstallAndRelaunch(update: Update, onProgress: (progress: UpdateProgress) => void) {
   let downloaded = 0;
   let total: number | undefined;

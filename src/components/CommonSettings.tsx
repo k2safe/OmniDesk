@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { exportWorkspaceArchive, importWorkspaceArchive, requireMasterPassword, saveEncryptedStoreItem, setGlobalShortcuts } from "../lib/desktop";
 import type { AppPreferences, AppShortcuts, ThemeMode } from "../lib/store";
 import { DEFAULT_SHORTCUTS } from "../lib/store";
-import { checkForUpdate, downloadInstallAndRelaunch, formatUpdaterError, type UpdateProgress } from "../lib/updater";
+import { checkForUpdate, downloadInstallAndRelaunch, formatUpdaterError, getCurrentAppVersion, type UpdateProgress } from "../lib/updater";
 import { OptionSelect } from "./OptionSelect";
 import { UpdateProgressPanel } from "./UpdateProgressPanel";
 
@@ -57,6 +57,7 @@ export function CommonSettings({
   const [updateStatus, setUpdateStatus] = useState("");
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateTransfer, setUpdateTransfer] = useState<UpdateProgress>({ downloaded: 0 });
+  const [currentVersion, setCurrentVersion] = useState("");
   const autoApplyTimer = useRef<number | null>(null);
   const lastAppliedShortcuts = useRef(shortcutSignature(preferences.shortcuts ?? DEFAULT_SHORTCUTS));
 
@@ -65,6 +66,12 @@ export function CommonSettings({
     lastAppliedShortcuts.current = shortcutSignature(nextShortcuts);
     setShortcutDraft(nextShortcuts);
   }, [preferences.shortcuts]);
+
+  useEffect(() => {
+    void getCurrentAppVersion()
+      .then(setCurrentVersion)
+      .catch(() => setCurrentVersion(""));
+  }, []);
 
   const updateTheme = (themeMode: ThemeMode) => {
     onPreferencesChange({ ...preferences, themeMode });
@@ -114,42 +121,42 @@ export function CommonSettings({
     void applyShortcuts(DEFAULT_SHORTCUTS);
   };
 
+  const installUpdate = async (update: Update) => {
+    setInstallingUpdate(true);
+    setUpdateStatus(`发现新版本 v${update.version}，正在下载安装...`);
+    setUpdateProgress(0);
+    setUpdateTransfer({ downloaded: 0 });
+
+    await downloadInstallAndRelaunch(update, ({ downloaded, total }) => {
+      setUpdateTransfer({ downloaded, total });
+      setUpdateProgress(total ? Math.max(0, Math.min(100, Math.round((downloaded / total) * 100))) : 0);
+    });
+  };
+
   const handleCheckUpdate = async () => {
+    let reachedInstall = false;
     setUpdateStatus("");
     setAvailableUpdate(null);
     setCheckingUpdate(true);
+    setInstallingUpdate(false);
     setUpdateProgress(0);
     setUpdateTransfer({ downloaded: 0 });
     try {
       const update = await checkForUpdate();
       if (!update) {
-        setUpdateStatus("当前已经是最新版本。");
+        setUpdateStatus(currentVersion ? `当前已经是最新版本 v${currentVersion}。` : "当前已经是最新版本。");
         return;
       }
 
       setAvailableUpdate(update);
-      setUpdateStatus(`发现新版本 ${update.version}${update.body ? `：${update.body}` : ""}`);
+      setCheckingUpdate(false);
+      reachedInstall = true;
+      await installUpdate(update);
     } catch (error) {
-      setUpdateStatus(`检查更新失败：${formatUpdaterError(error)}`);
+      setUpdateStatus(`${reachedInstall ? "更新安装失败" : "检查更新失败"}：${formatUpdaterError(error)}`);
+      setInstallingUpdate(false);
     } finally {
       setCheckingUpdate(false);
-    }
-  };
-
-  const handleInstallUpdate = async () => {
-    if (!availableUpdate) return;
-    setInstallingUpdate(true);
-    setUpdateStatus("开始下载更新...");
-    setUpdateProgress(0);
-    setUpdateTransfer({ downloaded: 0 });
-    try {
-      await downloadInstallAndRelaunch(availableUpdate, ({ downloaded, total }) => {
-        setUpdateTransfer({ downloaded, total });
-        setUpdateProgress(total ? Math.max(0, Math.min(100, Math.round((downloaded / total) * 100))) : 0);
-      });
-    } catch (error) {
-      setUpdateStatus(`更新安装失败：${formatUpdaterError(error)}`);
-      setInstallingUpdate(false);
     }
   };
 
@@ -319,34 +326,37 @@ export function CommonSettings({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-bold text-slate-900">桌面自动升级</div>
-                <div className="mt-1 text-xs font-medium text-slate-400">通过 GitHub Release 获取签名更新包。</div>
+                <div className="mt-1 text-xs font-medium text-slate-400">检查到新版本后会自动下载安装并重启。</div>
               </div>
-              {availableUpdate && (
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                  v{availableUpdate.version}
-                </span>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {currentVersion && (
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    当前 v{currentVersion}
+                  </span>
+                )}
+                {availableUpdate && (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                    新版 v{availableUpdate.version}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div>
               <button
                 type="button"
                 onClick={handleCheckUpdate}
                 disabled={checkingUpdate || installingUpdate}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60"
               >
                 <Download size={16} />
-                {checkingUpdate ? "检查中..." : "检查更新"}
-              </button>
-              <button
-                type="button"
-                onClick={handleInstallUpdate}
-                disabled={!availableUpdate || installingUpdate}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
-              >
-                <Check size={16} />
-                {installingUpdate ? "安装中..." : "下载安装"}
+                {checkingUpdate ? "检查中..." : installingUpdate ? "下载安装中..." : "检查并自动升级"}
               </button>
             </div>
+            {(checkingUpdate || installingUpdate) && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500">
+                {checkingUpdate ? "正在检查最新版本..." : "下载完成后会自动安装并重启。"}
+              </div>
+            )}
             {installingUpdate && (
               <div className="mt-3">
                 <UpdateProgressPanel
@@ -362,7 +372,6 @@ export function CommonSettings({
               </div>
             )}
           </section>
-
           <section className="grid grid-cols-2 gap-2">
             <button
               type="button"
