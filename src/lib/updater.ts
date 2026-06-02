@@ -42,3 +42,17 @@ export async function downloadInstallAndRelaunch(update: Update, onProgress: (pr
   const { relaunch } = await import("@tauri-apps/plugin-process");
   await relaunch();
 }
+
+export function formatUpdaterError(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized && serialized !== "{}") return serialized;
+  } catch {
+    // Fall through to the generic conversion below.
+  }
+
+  return String(error || "未知错误");
+}

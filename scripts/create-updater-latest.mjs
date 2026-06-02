@@ -8,6 +8,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"
 const artifactsDir = path.resolve(process.argv[2] || "release-artifacts");
 const releaseRepo = process.env.OMNIDESK_RELEASE_REPO || "k2safe/OmniDesk";
 const tagName = process.env.OMNIDESK_TAG_NAME || `app-v${packageJson.version}`;
+const updaterBaseUrl = process.env.OMNIDESK_UPDATER_BASE_URL?.replace(/\/+$/, "");
 const requiredPlatforms = (process.env.OMNIDESK_REQUIRED_PLATFORMS || "")
   .split(",")
   .map((item) => item.trim())
@@ -47,7 +48,9 @@ for (const file of metadataFiles) {
 
   platforms[updaterPlatform] = {
     signature,
-    url: `https://github.com/${releaseRepo}/releases/download/${tagName}/${encodeURIComponent(updaterAsset)}`
+    url: updaterBaseUrl
+      ? `${updaterBaseUrl}/${encodeURIComponent(updaterAsset)}`
+      : `https://github.com/${releaseRepo}/releases/download/${tagName}/${encodeURIComponent(updaterAsset)}`
   };
 }
 

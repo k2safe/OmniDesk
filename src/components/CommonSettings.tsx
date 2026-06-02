@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { exportWorkspaceArchive, importWorkspaceArchive, requireMasterPassword, saveEncryptedStoreItem, setGlobalShortcuts } from "../lib/desktop";
 import type { AppPreferences, AppShortcuts, ThemeMode } from "../lib/store";
 import { DEFAULT_SHORTCUTS } from "../lib/store";
-import { checkForUpdate, downloadInstallAndRelaunch, type UpdateProgress } from "../lib/updater";
+import { checkForUpdate, downloadInstallAndRelaunch, formatUpdaterError, type UpdateProgress } from "../lib/updater";
 import { OptionSelect } from "./OptionSelect";
 import { UpdateProgressPanel } from "./UpdateProgressPanel";
 
@@ -130,7 +130,7 @@ export function CommonSettings({
       setAvailableUpdate(update);
       setUpdateStatus(`发现新版本 ${update.version}${update.body ? `：${update.body}` : ""}`);
     } catch (error) {
-      setUpdateStatus(error instanceof Error ? error.message : "检查更新失败");
+      setUpdateStatus(`检查更新失败：${formatUpdaterError(error)}`);
     } finally {
       setCheckingUpdate(false);
     }
@@ -148,7 +148,7 @@ export function CommonSettings({
         setUpdateProgress(total ? Math.max(0, Math.min(100, Math.round((downloaded / total) * 100))) : 0);
       });
     } catch (error) {
-      setUpdateStatus(error instanceof Error ? error.message : "更新安装失败");
+      setUpdateStatus(`更新安装失败：${formatUpdaterError(error)}`);
       setInstallingUpdate(false);
     }
   };
