@@ -18,12 +18,18 @@ const VALID_VIEWS: View[] = ["vault", "totp", "bookmarks", "notes", "snippets", 
 export const DEFAULT_PINNED: View[] = ["vault", "totp", "notes", "devtools", "pomodoro"];
 
 export type ThemeMode = "system" | "light" | "dark";
+export type AutoLockUnit = "second" | "minute" | "hour";
 
 export interface AppShortcuts {
   quickPanel: string;
   screenshot: string;
   colorPicker: string;
   localDrop: string;
+}
+
+export interface AutoLockPreferences {
+  value: number;
+  unit: AutoLockUnit;
 }
 
 export const DEFAULT_SHORTCUTS: AppShortcuts = {
@@ -33,9 +39,15 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
   localDrop: "Option+Shift+D",
 };
 
+export const DEFAULT_AUTO_LOCK: AutoLockPreferences = {
+  value: 5,
+  unit: "minute",
+};
+
 export interface AppPreferences {
   themeMode: ThemeMode;
   shortcuts: AppShortcuts;
+  autoLock: AutoLockPreferences;
 }
 
 export interface OmniStore {
@@ -74,10 +86,46 @@ function isView(value: unknown): value is View {
   return typeof value === "string" && VALID_VIEWS.includes(value as View);
 }
 
+function isAutoLockUnit(value: unknown): value is AutoLockUnit {
+  return value === "second" || value === "minute" || value === "hour";
+}
+
+function clampAutoLockValue(value: unknown, unit: AutoLockUnit) {
+  const maxByUnit: Record<AutoLockUnit, number> = {
+    second: 86_400,
+    minute: 1_440,
+    hour: 24,
+  };
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_AUTO_LOCK.value;
+  return Math.max(1, Math.min(maxByUnit[unit], Math.floor(parsed)));
+}
+
+export function normalizeAutoLockPreferences(value: unknown): AutoLockPreferences {
+  if (!isRecord(value)) return DEFAULT_AUTO_LOCK;
+
+  const unit = isAutoLockUnit(value.unit) ? value.unit : DEFAULT_AUTO_LOCK.unit;
+  return {
+    value: clampAutoLockValue(value.value, unit),
+    unit,
+  };
+}
+
+export function autoLockToMilliseconds(autoLock: AutoLockPreferences) {
+  const normalized = normalizeAutoLockPreferences(autoLock);
+  const multiplier: Record<AutoLockUnit, number> = {
+    second: 1_000,
+    minute: 60_000,
+    hour: 3_600_000,
+  };
+  return normalized.value * multiplier[normalized.unit];
+}
+
 function normalizePreferences(value: unknown): AppPreferences {
   const defaults: AppPreferences = {
     themeMode: "system",
     shortcuts: DEFAULT_SHORTCUTS,
+    autoLock: DEFAULT_AUTO_LOCK,
   };
   if (!isRecord(value)) return defaults;
 
@@ -93,6 +141,7 @@ function normalizePreferences(value: unknown): AppPreferences {
       colorPicker: typeof shortcuts.colorPicker === "string" ? shortcuts.colorPicker : defaults.shortcuts.colorPicker,
       localDrop: typeof shortcuts.localDrop === "string" ? shortcuts.localDrop : defaults.shortcuts.localDrop,
     },
+    autoLock: normalizeAutoLockPreferences(value.autoLock),
   };
 }
 
@@ -110,6 +159,7 @@ export function createDefaultStore(): OmniStore {
     preferences: {
       themeMode: "system",
       shortcuts: DEFAULT_SHORTCUTS,
+      autoLock: DEFAULT_AUTO_LOCK,
     },
     vault: [
       { id: "1", title: "GitHub 个人服务器", username: "user@github.com", passwordEncrypted: "8*x9s$2mAQ!", createdAt: now },

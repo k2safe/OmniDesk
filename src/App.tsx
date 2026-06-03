@@ -18,7 +18,7 @@ import { CommonSettings } from "./components/CommonSettings";
 import { ExportNotice } from "./components/ExportNotice";
 import { MasterPasswordPrompt, type MasterPasswordRequest } from "./components/MasterPasswordPrompt";
 import { getSystemIdleMillis, isDesktopRuntime, lockWorkspace, setGlobalShortcuts, setMasterPasswordRequestHandler, startWindowDrag, toggleQuickPanel } from "./lib/desktop";
-import { OmniStoreProvider, saveOmniStore, unlockAndLoadOmniStore, useOmniStore, useStoreField } from "./lib/store";
+import { OmniStoreProvider, autoLockToMilliseconds, saveOmniStore, unlockAndLoadOmniStore, useOmniStore, useStoreField } from "./lib/store";
 import type { OmniStore, ThemeMode } from "./lib/store";
 
 
@@ -61,7 +61,6 @@ export default function App() {
     await lockWorkspace().catch((error) => console.error("Failed to lock workspace", error));
   };
 
-  useAutoLock(isLocked, handleLock);
 
   if (isLocked) {
     return (
@@ -90,11 +89,18 @@ export default function App() {
   );
 }
 
-function useAutoLock(isLocked: boolean, onLock: () => Promise<void>) {
-  useEffect(() => {
-    if (isLocked) return;
+function useAutoLock(timeoutMs: number, onLock: () => Promise<void>) {
+  const onLockRef = useRef(onLock);
 
-    const idleLimit = 3 * 60 * 1000;
+  useEffect(() => {
+    onLockRef.current = onLock;
+  }, [onLock]);
+
+  useEffect(() => {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return;
+
+    const idleLimit = Math.max(1_000, timeoutMs);
+    const checkInterval = Math.min(15_000, Math.max(1_000, Math.floor(idleLimit / 4)));
     let localLastActivity = Date.now();
     let isLocking = false;
 
@@ -107,7 +113,7 @@ function useAutoLock(isLocked: boolean, onLock: () => Promise<void>) {
 
       if (idleMillis >= idleLimit) {
         isLocking = true;
-        await onLock();
+        await onLockRef.current();
         return true;
       }
 
@@ -130,7 +136,7 @@ function useAutoLock(isLocked: boolean, onLock: () => Promise<void>) {
     events.forEach((event) => window.addEventListener(event, markActivity, { passive: true, capture: true }));
     window.addEventListener("focus", checkResumeIdle);
     document.addEventListener("visibilitychange", checkResumeIdle);
-    const interval = window.setInterval(checkIdle, 15_000);
+    const interval = window.setInterval(checkIdle, checkInterval);
 
     return () => {
       events.forEach((event) => window.removeEventListener(event, markActivity, { capture: true }));
@@ -138,7 +144,7 @@ function useAutoLock(isLocked: boolean, onLock: () => Promise<void>) {
       document.removeEventListener("visibilitychange", checkResumeIdle);
       window.clearInterval(interval);
     };
-  }, [isLocked, onLock]);
+  }, [timeoutMs]);
 }
 
 function useThemePreference(themeMode: ThemeMode, enabled = true) {
@@ -324,6 +330,8 @@ function Workspace({ onLock }: { onLock: () => void | Promise<void> }) {
     await saveOmniStore(store);
     await onLock();
   };
+
+  useAutoLock(autoLockToMilliseconds(preferences.autoLock), handleLock);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-slate-50 font-sans">

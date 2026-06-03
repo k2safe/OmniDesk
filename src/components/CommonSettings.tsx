@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { Check, Download, Keyboard, KeyRound, Lock, Monitor, Moon, Palette, Settings, Sun, Upload, X } from "lucide-react";
+import { Check, Clock3, Download, Keyboard, KeyRound, Lock, Monitor, Moon, Palette, Settings, Sun, Upload, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { exportWorkspaceArchive, importWorkspaceArchive, requireMasterPassword, saveEncryptedStoreItem, setGlobalShortcuts } from "../lib/desktop";
-import type { AppPreferences, AppShortcuts, ThemeMode } from "../lib/store";
-import { DEFAULT_SHORTCUTS } from "../lib/store";
+import type { AppPreferences, AppShortcuts, AutoLockUnit, ThemeMode } from "../lib/store";
+import { DEFAULT_AUTO_LOCK, DEFAULT_SHORTCUTS, normalizeAutoLockPreferences } from "../lib/store";
 import { checkForUpdate, downloadInstallAndRelaunch, formatUpdaterError, getCurrentAppVersion, type UpdateProgress } from "../lib/updater";
 import { cn } from "../lib/utils";
 import { OptionSelect } from "./OptionSelect";
@@ -25,6 +25,24 @@ const themeOptions: { value: ThemeMode; label: string }[] = [
   { value: "light", label: "浅色" },
   { value: "dark", label: "深色" },
 ];
+
+const autoLockUnitOptions: { value: AutoLockUnit; label: string }[] = [
+  { value: "second", label: "秒" },
+  { value: "minute", label: "分钟" },
+  { value: "hour", label: "小时" },
+];
+
+const autoLockUnitLabels: Record<AutoLockUnit, string> = {
+  second: "秒",
+  minute: "分钟",
+  hour: "小时",
+};
+
+const autoLockMaxByUnit: Record<AutoLockUnit, number> = {
+  second: 86_400,
+  minute: 1_440,
+  hour: 24,
+};
 
 const shortcutFields: { key: keyof AppShortcuts; label: string; hint: string }[] = [
   { key: "quickPanel", label: "唤起 Quick", hint: "打开快捷动作小窗" },
@@ -163,6 +181,7 @@ export function CommonSettings({
   const [status, setStatus] = useState("");
   const [activeSection, setActiveSection] = useState<SettingSectionId>("appearance");
   const [isMigrating, setIsMigrating] = useState(false);
+  const [autoLockValueDraft, setAutoLockValueDraft] = useState(String(preferences.autoLock?.value ?? DEFAULT_AUTO_LOCK.value));
   const [shortcutDraft, setShortcutDraft] = useState<AppShortcuts>(preferences.shortcuts ?? DEFAULT_SHORTCUTS);
   const [shortcutStatus, setShortcutStatus] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -174,12 +193,17 @@ export function CommonSettings({
   const [currentVersion, setCurrentVersion] = useState("");
   const autoApplyTimer = useRef<number | null>(null);
   const lastAppliedShortcuts = useRef(shortcutSignature(preferences.shortcuts ?? DEFAULT_SHORTCUTS));
+  const autoLock = normalizeAutoLockPreferences(preferences.autoLock);
 
   useEffect(() => {
     const nextShortcuts = preferences.shortcuts ?? DEFAULT_SHORTCUTS;
     lastAppliedShortcuts.current = shortcutSignature(nextShortcuts);
     setShortcutDraft(nextShortcuts);
   }, [preferences.shortcuts]);
+
+  useEffect(() => {
+    setAutoLockValueDraft(String(autoLock.value));
+  }, [autoLock.value, autoLock.unit]);
 
   useEffect(() => {
     void getCurrentAppVersion()
@@ -189,6 +213,16 @@ export function CommonSettings({
 
   const updateTheme = (themeMode: ThemeMode) => {
     onPreferencesChange({ ...preferences, themeMode });
+  };
+
+  const commitAutoLock = (value: string, unit = autoLock.unit) => {
+    const nextAutoLock = normalizeAutoLockPreferences({ value, unit });
+    setAutoLockValueDraft(String(nextAutoLock.value));
+    onPreferencesChange({ ...preferences, autoLock: nextAutoLock });
+  };
+
+  const updateAutoLockUnit = (unit: AutoLockUnit) => {
+    commitAutoLock(autoLockValueDraft, unit);
   };
 
   const updateShortcutDraft = (key: keyof AppShortcuts, value: string) => {
@@ -569,6 +603,48 @@ export function CommonSettings({
                     安全
                   </div>
                   <div className="mt-1 text-xs font-semibold text-slate-400">主密码和锁屏入口</div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                        <Clock3 size={17} className="text-emerald-600" />
+                        自动锁屏
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-slate-400">超过设定时长无操作后自动锁定，解锁需要主密码。</div>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                      {autoLock.value} {autoLockUnitLabels[autoLock.unit]}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-[minmax(0,1fr)_170px] gap-3">
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold text-slate-500">时长</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={autoLockMaxByUnit[autoLock.unit]}
+                        step={1}
+                        value={autoLockValueDraft}
+                        onChange={(event) => setAutoLockValueDraft(event.target.value)}
+                        onBlur={() => commitAutoLock(autoLockValueDraft)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur();
+                        }}
+                        className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold text-slate-500">单位</span>
+                      <OptionSelect value={autoLock.unit} options={autoLockUnitOptions} onChange={updateAutoLockUnit} />
+                    </label>
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500">
+                    当前策略：无操作 {autoLock.value} {autoLockUnitLabels[autoLock.unit]} 后自动回到锁屏页。
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
