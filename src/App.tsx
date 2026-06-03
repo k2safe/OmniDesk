@@ -20,6 +20,7 @@ import { MasterPasswordPrompt, type MasterPasswordRequest } from "./components/M
 import { getSystemIdleMillis, isDesktopRuntime, lockWorkspace, setGlobalShortcuts, setMasterPasswordRequestHandler, startWindowDrag, toggleQuickPanel } from "./lib/desktop";
 import { OmniStoreProvider, autoLockToMilliseconds, saveOmniStore, unlockAndLoadOmniStore, useOmniStore, useStoreField } from "./lib/store";
 import type { OmniStore, ThemeMode } from "./lib/store";
+import { getCurrentAppVersion } from "./lib/updater";
 
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -209,6 +210,14 @@ function HotkeyNotice() {
 }
 
 function DesktopTitleBar() {
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    void getCurrentAppVersion()
+      .then((version) => setAppVersion(version))
+      .catch(() => setAppVersion(""));
+  }, []);
+
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -223,9 +232,10 @@ function DesktopTitleBar() {
     >
       <div
         data-tauri-drag-region
-        className="pointer-events-none select-none text-[13px] font-bold tracking-wide text-emerald-700/90"
+        className="pointer-events-none flex select-none items-baseline gap-1.5 text-[13px] font-bold tracking-wide text-emerald-700/90"
       >
-        OmniDesk
+        <span>OmniDesk</span>
+        {appVersion && <span className="text-[11px] font-semibold text-emerald-700/60">v{appVersion}</span>}
       </div>
     </div>
   );
