@@ -1,11 +1,11 @@
 {
-  "version": "0.1.11",
-  "notes": "OmniDesk 0.1.11",
-  "pub_date": "2026-06-02T17:24:33.916Z",
+  "version": "0.1.12",
+  "notes": "OmniDesk 0.1.12",
+  "pub_date": "2026-06-03T04:10:25.949Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUV282NzF5WFhpNXpPcksyTWN4UXVrcFBTTHdvL3ppZitEM0E1TWd4dmRpNVY1R0xyblRoLzh4SWIwMWZHN2hZZzVmUnBQSWU0NDZ6ZjRqTzU0YXVjYmI5ekhKR25RRmdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwNDIxMDczCWZpbGU6T21uaURlc2suYXBwLnRhci5nego0TGRSdW1FNDVUcHR5dE5WTjZDT0plU2dLektnWTV0RFlMUEppaHV1YXFDbnBzQi9tSWwyOXA4U2p3Q041S2NsM2tRRGhzQVpWN1VqcytqbjVkeW9Cdz09Cg==",
-      "url": "https://raw.githubusercontent.com/k2safe/OmniDesk/main/updates/app-v0.1.11/OmniDesk-v0.1.11-macos-aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUV282NzF5WFhpNXl5bkVjakxRVlNBNFdxd0JIaHBPakk1YldLc2F5aUFOWUJlWGRXRWtsNXdnVmozSDNEaUNjUTF0QkNuMHBMSEo5VlRiS2tvMlFFNUFkdVk4OFMxVndVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwNDU5ODI1CWZpbGU6T21uaURlc2suYXBwLnRhci5negpxcHIxVERrN3JhOUl0UlJYdkFFZjliMzN6RldTcnpuZGJtNjh4WGNRU1d5L1pTYjRWcXZ4YzlQTjN6ZVBqN2xHTGprVzNSRWwyZjVaZnVtbzJwUThCZz09Cg==",
+      "url": "https://raw.githubusercontent.com/k2safe/OmniDesk/main/updates/app-v0.1.12/OmniDesk-v0.1.12-macos-aarch64.app.tar.gz"
     }
   }
 }
