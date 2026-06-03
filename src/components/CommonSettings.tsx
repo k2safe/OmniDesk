@@ -46,7 +46,7 @@ const autoLockMaxByUnit: Record<AutoLockUnit, number> = {
 
 const shortcutFields: { key: keyof AppShortcuts; label: string; hint: string }[] = [
   { key: "quickPanel", label: "唤起 Quick", hint: "打开快捷动作小窗" },
-  { key: "screenshot", label: "截图", hint: "调用系统快捷键复制选区" },
+  { key: "screenshot", label: "截图", hint: "macOS 选区截图到剪贴板" },
   { key: "colorPicker", label: "取色", hint: "取鼠标位置颜色并复制 HEX" },
   { key: "localDrop", label: "快传", hint: "开启局域网临时上传链接" },
 ];
@@ -253,8 +253,8 @@ export function CommonSettings({
       lastAppliedShortcuts.current = shortcutSignature(shortcuts);
       onPreferencesChange(nextPreferences);
       setShortcutStatus(source === "auto"
-        ? "快捷键已自动保存并注册。截图会调用系统快捷键复制选区；如果被拦截，请允许 OmniDesk 辅助功能权限。"
-        : "快捷键已注册。截图会调用系统快捷键复制选区；如果被拦截，请在系统设置里允许 OmniDesk 辅助功能权限。");
+        ? "快捷键已自动保存并注册。截图会调用 macOS 选区截图并复制到剪贴板。"
+        : "快捷键已注册。截图会调用 macOS 选区截图并复制到剪贴板。");
     } catch (error) {
       setShortcutStatus(error instanceof Error ? error.message : "快捷键设置失败");
     }

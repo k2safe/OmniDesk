@@ -2896,26 +2896,21 @@ fn capture_screenshot(app: AppHandle) -> Result<bool, String> {
   }
   thread::sleep(Duration::from_millis(120));
 
-  let output = Command::new("/usr/bin/osascript")
-    .arg("-e")
-    .arg(
-      r#"tell application "System Events" to key code 21 using {control down, shift down, command down}"#,
-    )
+  let output = Command::new("/usr/sbin/screencapture")
+    .args(["-i", "-c"])
     .output()
-    .map_err(|err| format!("唤起系统截图快捷键失败: {err}"))?;
+    .map_err(|err| format!("启动系统截图失败: {err}"))?;
 
   if output.status.success() {
-    Ok(true)
+    return Ok(true);
+  }
+
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  let message = stderr.trim();
+  if message.is_empty() {
+    Err(format!("系统截图取消或失败: {}", output.status))
   } else {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let message = stderr.trim();
-    if message.is_empty() {
-      Err(format!("系统截图快捷键唤起失败: {}", output.status))
-    } else {
-      Err(format!(
-        "系统截图快捷键唤起失败: {message}。请在 系统设置 > 隐私与安全性 > 辅助功能 中允许 OmniDesk，或直接使用 Control+Command+Shift+4。"
-      ))
-    }
+    Err(format!("系统截图取消或失败: {message}"))
   }
 }
 
