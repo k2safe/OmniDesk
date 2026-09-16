@@ -63,6 +63,11 @@ type SettingSectionId = "appearance" | "shortcuts" | "migration" | "updates" | "
 
 const modifierNames = new Set(["command", "cmd", "meta", "option", "opt", "alt", "shift", "control", "ctrl", "⌘", "⌥", "⇧", "⌃"]);
 
+function migrationErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return message.trim() || fallback;
+}
+
 function themeIcon(themeMode: ThemeMode) {
   if (themeMode === "dark") return <Moon size={16} />;
   if (themeMode === "light") return <Sun size={16} />;
@@ -181,6 +186,8 @@ export function CommonSettings({
   const [status, setStatus] = useState("");
   const [activeSection, setActiveSection] = useState<SettingSectionId>("appearance");
   const [isMigrating, setIsMigrating] = useState(false);
+  const [showImportConfirmation, setShowImportConfirmation] = useState(false);
+  const importConfirmationRef = useRef<HTMLDialogElement | null>(null);
   const [autoLockValueDraft, setAutoLockValueDraft] = useState(String(preferences.autoLock?.value ?? DEFAULT_AUTO_LOCK.value));
   const [shortcutDraft, setShortcutDraft] = useState<AppShortcuts>(preferences.shortcuts ?? DEFAULT_SHORTCUTS);
   const [shortcutStatus, setShortcutStatus] = useState("");
@@ -210,6 +217,13 @@ export function CommonSettings({
       .then(setCurrentVersion)
       .catch(() => setCurrentVersion(""));
   }, []);
+
+  useEffect(() => {
+    const dialog = importConfirmationRef.current;
+    if (!showImportConfirmation || !dialog) return;
+    dialog.showModal();
+    return () => dialog.close();
+  }, [showImportConfirmation]);
 
   const updateTheme = (themeMode: ThemeMode) => {
     onPreferencesChange({ ...preferences, themeMode });
@@ -329,16 +343,16 @@ export function CommonSettings({
       const result = await exportWorkspaceArchive();
       if (result.path) setStatus(`整包已导出：${result.path}`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "整包导出失败");
+      setStatus(migrationErrorMessage(error, "整包导出失败"));
     } finally {
       setIsMigrating(false);
     }
   };
 
   const handleImportWorkspace = async () => {
-    const confirmed = window.confirm("整包导入只允许空项目执行。导入后会替换本地数据库和资源，并需要使用备份中的主密码登录。继续吗？");
-    if (!confirmed) return;
-    setStatus("");
+    if (isMigrating) return;
+    setShowImportConfirmation(false);
+    setStatus("请选择 OmniDesk 整包备份（.zip），选择后将开始导入。");
     setIsMigrating(true);
     try {
       const result = await importWorkspaceArchive();
@@ -346,10 +360,9 @@ export function CommonSettings({
         setStatus("已取消导入");
         return;
       }
-      window.alert("整包导入完成，应用会重新加载。请使用备份中的主密码登录。");
       window.location.reload();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "整包导入失败");
+      setStatus(migrationErrorMessage(error, "整包导入失败"));
     } finally {
       setIsMigrating(false);
     }
@@ -380,6 +393,7 @@ export function CommonSettings({
           </div>
           <button
             onClick={onClose}
+            disabled={isMigrating}
             className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900"
             title="关闭"
           >
@@ -398,6 +412,7 @@ export function CommonSettings({
                     key={section.id}
                     type="button"
                     onClick={() => setActiveSection(section.id)}
+                    disabled={isMigrating}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all",
                       selected
@@ -524,17 +539,20 @@ export function CommonSettings({
                   </button>
                   <button
                     type="button"
-                    onClick={handleImportWorkspace}
+                    onClick={() => {
+                      setStatus("");
+                      setShowImportConfirmation(true);
+                    }}
                     disabled={isMigrating}
                     className="inline-flex h-24 flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
                   >
                     <Upload size={18} />
-                    空项目导入
+                    {isMigrating ? "迁移处理中..." : "空项目导入"}
                   </button>
                 </div>
 
                 {status && (
-                  <div className="break-all rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500">
+                  <div role="status" className="break-all rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500">
                     {status}
                   </div>
                 )}
@@ -676,6 +694,40 @@ export function CommonSettings({
           </div>
         </div>
       </motion.div>
+      <dialog
+        ref={importConfirmationRef}
+        aria-labelledby="workspace-import-title"
+        aria-describedby="workspace-import-description"
+        onCancel={(event) => {
+          event.preventDefault();
+          setShowImportConfirmation(false);
+        }}
+        className="fixed inset-0 m-auto w-[calc(100%-48px)] max-w-md rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-950/35 backdrop:backdrop-blur-sm"
+      >
+        <h2 id="workspace-import-title" className="text-base font-bold">确认导入整包备份</h2>
+        <p id="workspace-import-description" className="mt-3 text-sm leading-6 text-slate-500">
+          整包导入只允许在空项目中执行。请选择通过“导出整包”生成的 .zip 文件。
+          导入会替换本地数据库和资源，成功后自动重新加载。请使用备份中的主密码登录。
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setShowImportConfirmation(false)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={isMigrating}
+            onClick={() => void handleImportWorkspace()}
+            className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-60"
+          >
+            选择备份并导入
+          </button>
+        </div>
+      </dialog>
     </motion.div>
   );
 }
